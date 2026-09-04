@@ -156,6 +156,42 @@ export const documentService = {
   },
 
   /**
+   * Trigger semantic vector indexing for a PROCESSED document (Phase 4)
+   */
+  async indexDocument(id: string): Promise<ApiResponse<{ document: DocumentItem }>> {
+    const response = await api.post<ApiResponse<{ document: DocumentItem }>>(`/documents/${id}/index`);
+    return response.data;
+  },
+
+  /**
+   * Retrieve indexing status and vector statistics for a document (Phase 4)
+   */
+  async getIndexingStatus(id: string): Promise<ApiResponse<{
+    status: {
+      id: string;
+      status: string;
+      chunkCount: number;
+      indexedAt?: string | null;
+      embeddingModel?: string;
+      embeddingDimensions?: number;
+      indexingError?: string | null;
+    };
+  }>> {
+    const response = await api.get<ApiResponse<{
+      status: {
+        id: string;
+        status: string;
+        chunkCount: number;
+        indexedAt?: string | null;
+        embeddingModel?: string;
+        embeddingDimensions?: number;
+        indexingError?: string | null;
+      };
+    }>>(`/documents/${id}/indexing`);
+    return response.data;
+  },
+
+  /**
    * Retrieve real document statistics
    */
   async getDocumentStats(): Promise<ApiResponse<{ stats: DocumentStats }>> {

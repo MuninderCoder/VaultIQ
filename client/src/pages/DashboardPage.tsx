@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   FileText,
   HardDrive,
-  RotateCw
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/Card';
@@ -141,32 +141,33 @@ export const DashboardPage: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Normalized text ready
+              {docStats?.processingCount ? `${docStats.processingCount} processing` : 'Normalized text ready'}
             </p>
           </CardContent>
         </Card>
 
-        {/* In Processing or Pending */}
+        {/* Indexed Documents (Phase 4 Vector Search) */}
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Processing / Uploaded
+                Indexed (Vector Chunks)
               </span>
-              <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
-                <RotateCw className="w-4 h-4" />
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                <Sparkles className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3">
               <span className="text-2xl font-bold text-slate-900">
-                {isLoadingStats
-                  ? '—'
-                  : `${docStats?.processingCount ?? 0} / ${docStats?.uploadedCount ?? 0}`}
+                {isLoadingStats ? '—' : docStats?.indexedCount ?? 0}
+              </span>
+              <span className="ml-2 text-xs text-slate-400">
+                {docStats?.indexedCount === 1 ? 'indexed' : 'indexed'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Active queue / pending extraction
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+              {docStats?.indexingCount ? `${docStats.indexingCount} indexing in progress` : 'Vector embeddings ready'}
             </p>
           </CardContent>
         </Card>
@@ -178,7 +179,7 @@ export const DashboardPage: React.FC = () => {
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Storage Used
               </span>
-              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+              <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
                 <HardDrive className="w-4 h-4" />
               </div>
             </div>

@@ -1,4 +1,5 @@
 export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
+export type IndexingStatus = 'NOT_INDEXED' | 'INDEXING' | 'INDEXED' | 'INDEX_FAILED';
 
 export interface DocumentMetadata {
   title?: string;
@@ -27,6 +28,10 @@ export interface DocumentItem {
   storagePath: string;
   status: DocumentStatus;
   processingError?: string | null;
+  indexingStatus: IndexingStatus;
+  indexingError?: string | null;
+  indexedAt?: string | null;
+  chunkCount: number;
   metadata: DocumentMetadata;
   content?: DocumentContent;
   uploadedAt: string;
@@ -55,6 +60,10 @@ export interface DocumentStats {
   processingCount: number;
   failedCount: number;
   uploadedCount: number;
+  indexedCount: number;
+  notIndexedCount: number;
+  indexingCount: number;
+  indexFailedCount: number;
   recentDocuments: Array<{
     id: string;
     originalName: string;
@@ -87,4 +96,31 @@ export interface DocumentContentResponse {
   originalName: string;
   status: DocumentStatus;
   content: DocumentContent;
+}
+
+export interface IndexingStatusResponse {
+  id: string;
+  status: IndexingStatus;
+  chunkCount: number;
+  indexedAt?: string | null;
+  embeddingModel?: string;
+  embeddingDimensions?: number;
+  indexingError?: string | null;
+}
+
+export interface SearchResultItem {
+  documentId: string;
+  documentName: string;
+  chunkId: string;
+  chunkIndex: number;
+  text: string;
+  score: number;
+  characterCount: number;
+  wordCount: number;
+}
+
+export interface SearchResponseData {
+  query: string;
+  count: number;
+  results: SearchResultItem[];
 }

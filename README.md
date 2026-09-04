@@ -13,9 +13,10 @@ Official Repository: [https://github.com/MuninderCoder/VaultIQ.git](https://gith
 - **Phase 1 — Platform Foundation**: Complete (Auth, JWT, Mongoose User, Express architecture, React 18 UI design system, Docker)
 - **Phase 2 — Document Management & Secure Storage**: Complete (Storage abstraction, local filesystem storage, Document model, upload validation, magic-byte checks, document CRUD, download, search/filter/pagination, dashboard statistics)
 - **Phase 3 — Document Processing & Text Extraction**: Complete (Multi-format text extraction pipeline [PDF, DOCX, TXT, MD], text normalizer, character/word/page metrics, lifecycle management, async processing trigger, processing status query, extracted content retrieval & viewer modal)
-- **Phase 4 — Document Indexing & Chunking**: Next Phase (Chunking strategies, token estimation)
+- **Phase 4 — Semantic / Vector Search**: Complete (Boundary-aware character chunking, 1536-dim vector embeddings via OpenAI / deterministic mock, DocumentChunk collection, Atlas Vector Search with local cosine fallback, user isolation, search API & UI)
+- **Phase 5 — RAG & Document Intelligence**: Next Phase (Context assembly, prompt engineering, grounded citation extraction, LLM answer synthesis)
 
-> **Strict Boundary Notice**: Phases 1, 2, and 3 establish enterprise storage, document management, and normalized text extraction. No AI, LLMs, embeddings, or vector databases are introduced in this phase.
+> **Strict Boundary Notice**: Phases 1 through 4 establish enterprise storage, document management, normalized text extraction, and vector semantic search. No LLM answer generation, generative chat, conversational agent, or placeholder AI responses are introduced in this phase.
 
 ---
 

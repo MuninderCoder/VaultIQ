@@ -246,5 +246,58 @@ export class DocumentController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/v1/documents/:id/index
+   * Trigger semantic chunking and embedding generation for a PROCESSED document (Phase 4)
+   */
+  static async indexDocument(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.user) {
+        ApiResponseHandler.error(res, 'Authentication required', null, 401);
+        return;
+      }
+
+      const document = await DocumentService.indexDocument(
+        req.user.userId,
+        req.params.id
+      );
+
+      ApiResponseHandler.success(res, 'Document indexed successfully', { document });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/documents/:id/indexing
+   * Query indexing status, chunk count, and embedding dimensions (Phase 4)
+   */
+  static async getIndexingStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.user) {
+        ApiResponseHandler.error(res, 'Authentication required', null, 401);
+        return;
+      }
+
+      const status = await DocumentService.getIndexingStatus(
+        req.user.userId,
+        req.params.id
+      );
+
+      ApiResponseHandler.success(res, 'Indexing status retrieved successfully', status);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
+
 

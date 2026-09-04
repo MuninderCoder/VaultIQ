@@ -53,7 +53,21 @@ router.get(
   DocumentController.getDocumentContent
 );
 
-// 9. Delete document
+// 9. Index document semantic vectors (Phase 4)
+router.post(
+  '/:id/index',
+  validateRequest(documentIdParamSchema),
+  DocumentController.indexDocument
+);
+
+// 10. Get document indexing status & vector metadata (Phase 4)
+router.get(
+  '/:id/indexing',
+  validateRequest(documentIdParamSchema),
+  DocumentController.getIndexingStatus
+);
+
+// 11. Delete document
 router.delete(
   '/:id',
   validateRequest(documentIdParamSchema),

@@ -16,7 +16,9 @@ import {
   X,
   Play,
   RotateCw,
-  BookOpen
+  BookOpen,
+  Database,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -73,8 +75,9 @@ export const DocumentsPage: React.FC = () => {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
-  // Processing state
+  // Processing & Indexing state
   const [processingDocIds, setProcessingDocIds] = useState<Record<string, boolean>>({});
+  const [indexingDocIds, setIndexingDocIds] = useState<Record<string, boolean>>({});
 
   // Delete modal state
   const [documentToDelete, setDocumentToDelete] = useState<DocumentItem | null>(null);
@@ -111,10 +114,12 @@ export const DocumentsPage: React.FC = () => {
     }
   }, [currentPage, searchQuery, activeStatus]);
 
-  // Polling effect: poll every 2 seconds when any document is in PROCESSING state
+  // Polling effect: poll every 2 seconds when any document is in PROCESSING or INDEXING state
   useEffect(() => {
-    const hasProcessing = documents.some((doc) => doc.status === 'PROCESSING');
-    if (!hasProcessing) return;
+    const hasActiveTask = documents.some(
+      (doc) => doc.status === 'PROCESSING' || doc.indexingStatus === 'INDEXING'
+    );
+    if (!hasActiveTask) return;
 
     const interval = setInterval(() => {
       fetchDocuments(true);
@@ -245,6 +250,20 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
+  // Phase 4: Trigger vector embedding indexing
+  const handleIndexDocument = async (doc: DocumentItem) => {
+    setIndexingDocIds((prev) => ({ ...prev, [doc._id]: true }));
+    try {
+      await documentService.indexDocument(doc._id);
+      fetchDocuments(true);
+    } catch (err: any) {
+      alert(err.response?.data?.message || err.message || 'Failed to trigger document indexing');
+      fetchDocuments(true);
+    } finally {
+      setIndexingDocIds((prev) => ({ ...prev, [doc._id]: false }));
+    }
+  };
+
   // Phase 3: Open extracted content viewer modal
   const handleOpenContentViewer = async (doc: DocumentItem) => {
     setViewingContentDoc(doc);
@@ -306,6 +325,22 @@ export const DocumentsPage: React.FC = () => {
         return 'warning';
       case 'FAILED':
         return 'danger';
+      default:
+        return 'default';
+    }
+  };
+
+  const getIndexingBadgeVariant = (
+    status: string
+  ): 'default' | 'success' | 'warning' | 'danger' | 'info' => {
+    switch (status) {
+      case 'INDEXED':
+        return 'success';
+      case 'INDEXING':
+        return 'warning';
+      case 'INDEX_FAILED':
+        return 'danger';
+      case 'NOT_INDEXED':
       default:
         return 'default';
     }
@@ -478,6 +513,7 @@ export const DocumentsPage: React.FC = () => {
                   <th scope="col" className="px-4 py-3.5">Type</th>
                   <th scope="col" className="px-4 py-3.5">Size</th>
                   <th scope="col" className="px-4 py-3.5">Status</th>
+                  <th scope="col" className="px-4 py-3.5">Indexing</th>
                   <th scope="col" className="px-4 py-3.5">Uploaded</th>
                   <th scope="col" className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
@@ -538,6 +574,20 @@ export const DocumentsPage: React.FC = () => {
                       </Badge>
                     </td>
 
+                    {/* Indexing Status Badge */}
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={getIndexingBadgeVariant(doc.indexingStatus || 'NOT_INDEXED')} size="sm">
+                          {doc.indexingStatus || 'NOT_INDEXED'}
+                        </Badge>
+                        {doc.indexingStatus === 'INDEXED' && doc.chunkCount !== undefined && (
+                          <span className="text-[11px] font-mono text-slate-400">
+                            ({doc.chunkCount} {doc.chunkCount === 1 ? 'chunk' : 'chunks'})
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
                     {/* Upload Date */}
                     <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">
                       {new Date(doc.uploadedAt).toLocaleDateString(undefined, {
@@ -593,6 +643,59 @@ export const DocumentsPage: React.FC = () => {
                           >
                             <BookOpen className="w-4 h-4" />
                           </button>
+                        )}
+
+                        {/* Phase 4: Vector Index Button */}
+                        {doc.status === 'PROCESSED' && (
+                          <>
+                            {/* Index / Re-index Button */}
+                            {(doc.indexingStatus === 'NOT_INDEXED' || doc.indexingStatus === 'INDEX_FAILED') && (
+                              <button
+                                onClick={() => handleIndexDocument(doc)}
+                                disabled={indexingDocIds[doc._id]}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  doc.indexingStatus === 'INDEX_FAILED'
+                                    ? 'text-rose-600 hover:bg-rose-50'
+                                    : 'text-indigo-600 hover:bg-indigo-50'
+                                }`}
+                                title={doc.indexingStatus === 'INDEX_FAILED' ? 'Retry Vector Indexing' : 'Index for Semantic Search'}
+                                aria-label={`${doc.indexingStatus === 'INDEX_FAILED' ? 'Retry Index' : 'Index'} ${doc.originalName}`}
+                              >
+                                {indexingDocIds[doc._id] ? (
+                                  <RotateCw className="w-4 h-4 animate-spin text-indigo-600" />
+                                ) : (
+                                  <Sparkles className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
+
+                            {/* Indexing Spinner */}
+                            {doc.indexingStatus === 'INDEXING' && (
+                              <span
+                                className="p-1.5 inline-flex items-center text-indigo-500"
+                                title="Generating vector embeddings..."
+                              >
+                                <RotateCw className="w-4 h-4 animate-spin" />
+                              </span>
+                            )}
+
+                            {/* Re-index already indexed doc */}
+                            {doc.indexingStatus === 'INDEXED' && (
+                              <button
+                                onClick={() => handleIndexDocument(doc)}
+                                disabled={indexingDocIds[doc._id]}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                title="Re-index Chunks"
+                                aria-label={`Re-index ${doc.originalName}`}
+                              >
+                                {indexingDocIds[doc._id] ? (
+                                  <RotateCw className="w-4 h-4 animate-spin text-indigo-600" />
+                                ) : (
+                                  <Database className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
+                          </>
                         )}
 
                         <button
@@ -954,6 +1057,58 @@ export const DocumentsPage: React.FC = () => {
                       <span className="font-bold">{selectedDocument.content.pageCount}</span>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Phase 4: Vector Indexing Status */}
+            {selectedDocument.status === 'PROCESSED' && (
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold flex items-center gap-1.5 text-slate-800">
+                    <Sparkles className="w-4 h-4 text-indigo-600" /> Semantic Vector Index
+                  </span>
+                  <Badge variant={getIndexingBadgeVariant(selectedDocument.indexingStatus || 'NOT_INDEXED')} size="sm">
+                    {selectedDocument.indexingStatus || 'NOT_INDEXED'}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                  <div>
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold block">Vector Chunks</span>
+                    <span className="font-bold text-slate-700">{selectedDocument.chunkCount || 0} chunks</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold block">Indexed At</span>
+                    <span className="text-slate-700">
+                      {selectedDocument.indexedAt ? new Date(selectedDocument.indexedAt).toLocaleString() : 'Not indexed'}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedDocument.indexingError && (
+                  <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs mt-2">
+                    <span className="font-semibold block">Indexing Error:</span>
+                    <span>{selectedDocument.indexingError}</span>
+                  </div>
+                )}
+
+                <div className="mt-2.5 flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setIsDetailsModalOpen(false);
+                      handleIndexDocument(selectedDocument);
+                    }}
+                    leftIcon={<Sparkles className="w-3.5 h-3.5 text-indigo-600" />}
+                  >
+                    {selectedDocument.indexingStatus === 'INDEXED'
+                      ? 'Re-index Vector Chunks'
+                      : selectedDocument.indexingStatus === 'INDEX_FAILED'
+                      ? 'Retry Vector Indexing'
+                      : 'Index for Vector Search'}
+                  </Button>
                 </div>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { Schema, model, Document as MongooseDocument, Types } from 'mongoose';
 
 export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
+export type IndexingStatus = 'NOT_INDEXED' | 'INDEXING' | 'INDEXED' | 'INDEX_FAILED';
 
 export interface IDocumentMetadata {
   title?: string;
@@ -29,6 +30,10 @@ export interface IDocument extends MongooseDocument {
   storagePath: string;
   status: DocumentStatus;
   processingError?: string | null;
+  indexingStatus: IndexingStatus;
+  indexingError?: string | null;
+  indexedAt?: Date | null;
+  chunkCount: number;
   metadata: IDocumentMetadata;
   content?: IDocumentContent;
   uploadedAt: Date;
@@ -85,6 +90,25 @@ const documentSchema = new Schema<IDocument>(
     processingError: {
       type: String,
       default: null
+    },
+    indexingStatus: {
+      type: String,
+      enum: ['NOT_INDEXED', 'INDEXING', 'INDEXED', 'INDEX_FAILED'],
+      default: 'NOT_INDEXED',
+      required: true,
+      index: true
+    },
+    indexingError: {
+      type: String,
+      default: null
+    },
+    indexedAt: {
+      type: Date,
+      default: null
+    },
+    chunkCount: {
+      type: Number,
+      default: 0
     },
     metadata: {
       title: {

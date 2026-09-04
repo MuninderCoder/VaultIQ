@@ -49,15 +49,34 @@ This roadmap outlines the evolution of VaultIQ from initial architecture to a hi
 
 ---
 
-## Phase 4: Document Indexing & Chunking
-- Semantic chunking strategies (sliding window, sentence-aware, markdown-structure-aware)
-- Chunk metadata tagging (page numbers, section headers, timestamps)
-- Storage of raw document chunks in database with chunk hash verification
-- Token counting and estimation
+## Phase 4: Semantic / Vector Search (Complete ✅)
+- [x] Boundary-aware character-based text chunking (`CHUNK_SIZE=1000`, `CHUNK_OVERLAP=150`)
+- [x] Chunk character and word count tracking with deterministic forward progress
+- [x] Provider-agnostic embedding service abstraction (`IEmbeddingService`)
+- [x] Production OpenAI embedding implementation (`text-embedding-3-small`, 1536 dimensions, exponential backoff)
+- [x] Offline deterministic semantic mock embedding service for offline tests and local benchmarking
+- [x] Mongoose `DocumentChunk` schema with embedding vectors, parent document ref, and owner isolation
+- [x] Indexing lifecycle (`NOT_INDEXED` -> `INDEXING` -> `INDEXED` / `INDEX_FAILED`)
+- [x] Indexing trigger (`POST /api/v1/documents/:id/index`) and status (`GET /api/v1/documents/:id/indexing`)
+- [x] Re-indexing idempotency (new chunks generated and validated before replacing old chunks)
+- [x] Cascade deletion of chunks upon parent document deletion
+- [x] Empty document rejection with safe error messaging
+- [x] Semantic Search Engine with MongoDB Atlas Vector Search as primary and in-memory cosine fallback
+- [x] Search endpoint (`GET /api/v1/search?q=...&limit=...`) with strict query validation
+- [x] User-isolated vector search preventing cross-tenant information leakage
+- [x] Semantic search web interface (`SearchPage.tsx`) with similarity score badges and snippet inspection
+- [x] Documents page indexing actions and real-time polling during `INDEXING` state
+- [x] Dashboard vector metrics showing total indexed documents and real-time queue states
+- [x] Comprehensive automated test suite (16 test cases, 46 tests overall passing)
 
-- Vector database integration (Qdrant, Milvus, or MongoDB Atlas Vector Search)
-- Dense vector embedding generation using modern embedding models
-- Sparse lexical search integration (BM25)
+---
+
+## Phase 5: RAG & Document Intelligence (Next Phase)
+- Dense vector retrieval combined with reciprocal rank fusion
+- Retrieval augmented generation (RAG) context assembly
+- Grounded citation extraction with exact document and chunk attribution
+- LLM completion pipeline (OpenAI / Anthropic / local Ollama)
+- Conversational chat interface and thread persistence
 - Hybrid search fusion (Reciprocal Rank Fusion - RRF)
 - Pre-filtering by organizational ACLs and document boundaries
 

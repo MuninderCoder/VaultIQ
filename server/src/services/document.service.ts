@@ -1,9 +1,12 @@
 import crypto from 'crypto';
 import path from 'path';
 import { Types } from 'mongoose';
-import { DocumentModel, IDocument, DocumentStatus } from '../models/Document';
+import { DocumentModel, IDocument, DocumentStatus, IndexingStatus } from '../models/Document';
+import { DocumentChunkModel } from '../models/DocumentChunk';
 import { localStorageService } from '../storage/local.storage';
 import { ProcessorFactory } from '../processors/processor.factory';
+import { textChunker } from '../chunking/text.chunker';
+import { EmbeddingServiceFactory } from '../embeddings/embedding.service';
 import { env } from '../config/env';
 import { DocumentListQuery } from '../validators/document.validator';
 import { logger } from '../utils/logger';
@@ -21,6 +24,10 @@ export interface DocumentStatsResult {
   processingCount: number;
   failedCount: number;
   uploadedCount: number;
+  indexedCount: number;
+  notIndexedCount: number;
+  indexingCount: number;
+  indexFailedCount: number;
   recentDocuments: Array<{
     id: string;
     originalName: string;
@@ -237,7 +244,11 @@ export class DocumentService {
 
     // 2. Remove document record from MongoDB
     await DocumentModel.deleteOne({ _id: document._id });
-    logger.info(`Document ${documentId} ("${document.originalName}") deleted by user ${userId}`);
+
+    // 3. Cascade-delete all associated DocumentChunk records (prevent orphan chunks)
+    await DocumentChunkModel.deleteMany({ document: document._id });
+
+    logger.info(`Document ${documentId} ("${document.originalName}") and its chunks deleted by user ${userId}`);
   }
 
   /**
@@ -402,12 +413,161 @@ export class DocumentService {
   }
 
   /**
+   * Indexes a document for semantic vector search (Phase 4).
+   * Safe strategy: validates document is PROCESSED, chunks text, generates embeddings,
+   * validates vector dimensions, and only replaces old chunks after new chunks are verified.
+   */
+  static async indexDocument(userId: string, documentId: string): Promise<IDocument> {
+    const ownerId = new Types.ObjectId(userId);
+
+    // 1. Fetch document and verify ownership & processed status
+    const document = await this.getDocumentById(userId, documentId);
+
+    if (document.status !== 'PROCESSED' || !document.content) {
+      const error = new Error('Only PROCESSED documents with extracted text can be indexed');
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    if (document.indexingStatus === 'INDEXING') {
+      const error = new Error('Document is currently being indexed');
+      (error as any).statusCode = 409;
+      throw error;
+    }
+
+    // 2. Transition status to INDEXING
+    document.indexingStatus = 'INDEXING';
+    document.indexingError = null;
+    await document.save();
+
+    logger.info(`Starting indexing for document ${document._id} ("${document.originalName}")`);
+
+    try {
+      // 3. Empty document validation
+      const textToChunk = (document.content.text || '').trim();
+      if (textToChunk.length === 0) {
+        throw new Error('Document contains no searchable text.');
+      }
+
+      // 4. Chunk processed text into character-based chunks
+      const chunkItems = textChunker.chunk(textToChunk, {
+        chunkSize: env.CHUNK_SIZE,
+        chunkOverlap: env.CHUNK_OVERLAP
+      });
+
+      if (chunkItems.length === 0) {
+        throw new Error('Document contains no searchable text.');
+      }
+
+      logger.info(
+        `Generated ${chunkItems.length} text chunks for document ${document._id}. Generating embeddings...`
+      );
+
+      // 5. Generate embeddings via EmbeddingService
+      const embeddingService = EmbeddingServiceFactory.getService();
+      const chunkTexts = chunkItems.map((c) => c.text);
+      const vectors = await embeddingService.generateEmbeddings(chunkTexts);
+
+      // 6. Strict dimension validation before touching database
+      const expectedDims = embeddingService.getDimensions();
+      if (vectors.length !== chunkItems.length) {
+        throw new Error('Mismatch between chunk count and generated vector count');
+      }
+
+      for (let i = 0; i < vectors.length; i++) {
+        const vec = vectors[i];
+        if (!Array.isArray(vec) || vec.length !== expectedDims) {
+          throw new Error(
+            `Invalid embedding dimensions: expected ${expectedDims}, received ${vec?.length || 0}`
+          );
+        }
+      }
+
+      // 7. Atomic Chunk Replacement:
+      // We generate all DocumentChunk records in memory, delete existing chunks for this document,
+      // and insert the verified new chunks.
+      const newChunks = chunkItems.map((item, idx) => ({
+        document: document._id,
+        owner: ownerId,
+        chunkIndex: item.chunkIndex,
+        text: item.text,
+        characterCount: item.characterCount,
+        wordCount: item.wordCount,
+        startOffset: item.startOffset,
+        endOffset: item.endOffset,
+        embedding: vectors[idx],
+        embeddingModel: embeddingService.getModelName(),
+        embeddingDimensions: expectedDims,
+        createdAt: new Date()
+      }));
+
+      await DocumentChunkModel.deleteMany({ document: document._id });
+      await DocumentChunkModel.insertMany(newChunks);
+
+      // 8. Mark document as INDEXED
+      document.indexingStatus = 'INDEXED';
+      document.indexingError = null;
+      document.indexedAt = new Date();
+      document.chunkCount = newChunks.length;
+      await document.save();
+
+      logger.info(
+        `Document ${document._id} successfully indexed with ${newChunks.length} chunks (${expectedDims} dimensions)`
+      );
+
+      return document;
+    } catch (err: any) {
+      logger.error(`Document indexing failed for ${documentId}:`, err);
+      const safeMessage = err.message || 'An error occurred during document indexing';
+
+      document.indexingStatus = 'INDEX_FAILED';
+      document.indexingError = safeMessage;
+      // Preserve actual chunkCount in DB
+      const currentStoredChunks = await DocumentChunkModel.countDocuments({ document: document._id });
+      document.chunkCount = currentStoredChunks;
+      await document.save().catch((saveErr) => {
+        logger.error(`Failed to record INDEX_FAILED state for ${documentId}:`, saveErr);
+      });
+
+      throw err;
+    }
+  }
+
+  /**
+   * Retrieves indexing status and metrics for a document (Phase 4)
+   */
+  static async getIndexingStatus(
+    userId: string,
+    documentId: string
+  ): Promise<{
+    id: string;
+    status: IndexingStatus;
+    chunkCount: number;
+    indexedAt?: Date | null;
+    embeddingModel?: string;
+    embeddingDimensions?: number;
+    indexingError?: string | null;
+  }> {
+    const document = await this.getDocumentById(userId, documentId);
+
+    return {
+      id: document._id.toString(),
+      status: document.indexingStatus,
+      chunkCount: document.chunkCount || 0,
+      indexedAt: document.indexedAt,
+      embeddingModel: env.EMBEDDING_MODEL,
+      embeddingDimensions: env.EMBEDDING_DIMENSIONS,
+      indexingError: document.indexingError
+    };
+  }
+
+  /**
    * Aggregates real document statistics for authenticated user
    */
   static async getDocumentStats(userId: string): Promise<DocumentStatsResult> {
     const ownerId = new Types.ObjectId(userId);
 
-    const [totalCount, totalStorageAgg, recentDocs, extAgg, statusAgg] = await Promise.all([
+    const [totalCount, totalStorageAgg, recentDocs, extAgg, statusAgg, indexingAgg] = await Promise.all([
       DocumentModel.countDocuments({ owner: ownerId }),
       DocumentModel.aggregate([
         { $match: { owner: ownerId } },
@@ -425,6 +585,10 @@ export class DocumentService {
       DocumentModel.aggregate([
         { $match: { owner: ownerId } },
         { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      DocumentModel.aggregate([
+        { $match: { owner: ownerId } },
+        { $group: { _id: '$indexingStatus', count: { $sum: 1 } } }
       ])
     ]);
 
@@ -449,6 +613,18 @@ export class DocumentService {
       }
     });
 
+    const indexingCounts: Record<string, number> = {
+      NOT_INDEXED: 0,
+      INDEXING: 0,
+      INDEXED: 0,
+      INDEX_FAILED: 0
+    };
+    indexingAgg.forEach((item) => {
+      if (item._id) {
+        indexingCounts[item._id] = item.count;
+      }
+    });
+
     return {
       totalDocuments: totalCount,
       totalStorageUsed,
@@ -456,6 +632,10 @@ export class DocumentService {
       processingCount: statusCounts.PROCESSING || 0,
       failedCount: statusCounts.FAILED || 0,
       uploadedCount: statusCounts.UPLOADED || 0,
+      indexedCount: indexingCounts.INDEXED || 0,
+      notIndexedCount: indexingCounts.NOT_INDEXED || 0,
+      indexingCount: indexingCounts.INDEXING || 0,
+      indexFailedCount: indexingCounts.INDEX_FAILED || 0,
       recentDocuments: recentDocs.map((doc) => ({
         id: doc._id.toString(),
         originalName: doc.originalName,
