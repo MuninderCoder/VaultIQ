@@ -12,9 +12,10 @@ Official Repository: [https://github.com/MuninderCoder/VaultIQ.git](https://gith
 
 - **Phase 1 — Platform Foundation**: Complete (Auth, JWT, Mongoose User, Express architecture, React 18 UI design system, Docker)
 - **Phase 2 — Document Management & Secure Storage**: Complete (Storage abstraction, local filesystem storage, Document model, upload validation, magic-byte checks, document CRUD, download, search/filter/pagination, dashboard statistics)
-- **Phase 3 — Document Processing**: Next Phase (Text parsing, chunking, OCR)
+- **Phase 3 — Document Processing & Text Extraction**: Complete (Multi-format text extraction pipeline [PDF, DOCX, TXT, MD], text normalizer, character/word/page metrics, lifecycle management, async processing trigger, processing status query, extracted content retrieval & viewer modal)
+- **Phase 4 — Document Indexing & Chunking**: Next Phase (Chunking strategies, token estimation)
 
-> **Strict Boundary Notice**: Phases 1 & 2 establish enterprise storage and document management. No AI, LLMs, embeddings, or vector databases are introduced in this phase.
+> **Strict Boundary Notice**: Phases 1, 2, and 3 establish enterprise storage, document management, and normalized text extraction. No AI, LLMs, embeddings, or vector databases are introduced in this phase.
 
 ---
 
@@ -155,7 +156,10 @@ All endpoints are versioned under `/api/v1/`.
 - **`GET /api/v1/documents`**: List documents with pagination (`page`, `limit`), search (`search` matches originalName, title, description, tags), status filter (`status`), and sorting (`sort`).
 - **`GET /api/v1/documents/:id`**: Get document metadata (ownership verified).
 - **`GET /api/v1/documents/:id/download`**: Download physical document binary stream (RFC 5987 Content-Disposition).
-- **`DELETE /api/v1/documents/:id`**: Safely remove metadata from MongoDB and unlinks physical file from storage.
+### Document Processing & Text Extraction (Phase 3)
+- **`POST /api/v1/documents/:id/process`**: Trigger text extraction pipeline (PDF, DOCX, TXT, MD) with atomic state transition to `PROCESSING`.
+- **`GET /api/v1/documents/:id/processing`**: Query processing status, character count, word count, page count, and safe error details.
+- **`GET /api/v1/documents/:id/content`**: Retrieve normalized extracted text and processing metadata for a processed document.
 
 ---
 
@@ -163,7 +167,7 @@ All endpoints are versioned under `/api/v1/`.
 
 Run all automated tests across workspaces:
 ```bash
-# Backend unit & integration tests (22/22 passing)
+# Backend unit & integration tests (30/30 passing)
 npm run test --workspace=server
 
 # TypeScript strict checks across monorepo (0 errors)

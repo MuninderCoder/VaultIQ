@@ -32,7 +32,28 @@ router.get(
   DocumentController.downloadDocument
 );
 
-// 6. Delete document
+// 6. Process document text extraction (Phase 3)
+router.post(
+  '/:id/process',
+  validateRequest(documentIdParamSchema),
+  DocumentController.processDocument
+);
+
+// 7. Get processing status & metrics (Phase 3)
+router.get(
+  '/:id/processing',
+  validateRequest(documentIdParamSchema),
+  DocumentController.getProcessingStatus
+);
+
+// 8. Get extracted document content (Phase 3)
+router.get(
+  '/:id/content',
+  validateRequest(documentIdParamSchema),
+  DocumentController.getDocumentContent
+);
+
+// 9. Delete document
 router.delete(
   '/:id',
   validateRequest(documentIdParamSchema),

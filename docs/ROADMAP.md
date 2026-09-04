@@ -32,16 +32,29 @@ This roadmap outlines the evolution of VaultIQ from initial architecture to a hi
 
 ---
 
-## Phase 3: Document Processing & Extraction
-- Asynchronous background worker queues (BullMQ / Redis)
-- Document text parsing & OCR engine integration (Tesseract, PDFMiner, Unstructured)
-- Semantic chunking strategies (sliding window, sentence-aware, markdown-structure-aware)
-- Chunk metadata tagging (page numbers, section headers, timestamps)
-- Storage of raw document chunks in database with chunk hash verification
+## Phase 3: Document Processing & Text Extraction (Complete ✅)
+- [x] Multi-format document text extraction pipeline (PDF, DOCX, TXT, MD)
+- [x] Pluggable DocumentProcessor interface and ProcessorFactory dispatcher
+- [x] Pure JavaScript PDF extraction via `pdf-parse` with page counts and metadata
+- [x] Word extraction via `mammoth` for DOCX files
+- [x] UTF-8 plain text and markdown extraction with Markdown formatting preserved
+- [x] TextNormalizer utility (line endings, control characters, space collapse, paragraph separation)
+- [x] Configurable post-normalization extracted size limits (`MAX_EXTRACTED_TEXT_SIZE_MB=10`)
+- [x] Document lifecycle management (`UPLOADED` -> `PROCESSING` -> `PROCESSED` or `FAILED`)
+- [x] REST endpoints: `POST /:id/process`, `GET /:id/processing`, `GET /:id/content`
+- [x] Safe error messaging without leaking stack traces or internal filesystem paths
+- [x] Extracted text viewer modal on frontend with character, word, page statistics
+- [x] Real-time polling while documents are in `PROCESSING` state and retry on failure
+- [x] Dashboard metrics for processed, processing, and failed document counts
 
 ---
 
-## Phase 4: Vector Search & Hybrid Retrieval
+## Phase 4: Document Indexing & Chunking
+- Semantic chunking strategies (sliding window, sentence-aware, markdown-structure-aware)
+- Chunk metadata tagging (page numbers, section headers, timestamps)
+- Storage of raw document chunks in database with chunk hash verification
+- Token counting and estimation
+
 - Vector database integration (Qdrant, Milvus, or MongoDB Atlas Vector Search)
 - Dense vector embedding generation using modern embedding models
 - Sparse lexical search integration (BM25)

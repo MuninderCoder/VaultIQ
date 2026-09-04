@@ -122,6 +122,40 @@ export const documentService = {
   },
 
   /**
+   * Trigger text extraction processing for a document (Phase 3)
+   */
+  async processDocument(id: string): Promise<ApiResponse<{ document: DocumentItem }>> {
+    const response = await api.post<ApiResponse<{ document: DocumentItem }>>(`/documents/${id}/process`);
+    return response.data;
+  },
+
+  /**
+   * Get processing status and metrics for a document (Phase 3)
+   */
+  async getProcessingStatus(id: string): Promise<ApiResponse<{ status: any }>> {
+    const response = await api.get<ApiResponse<{ status: any }>>(`/documents/${id}/processing`);
+    return response.data;
+  },
+
+  /**
+   * Retrieve extracted document text content and metadata (Phase 3)
+   */
+  async getDocumentContent(id: string): Promise<ApiResponse<{
+    id: string;
+    originalName: string;
+    status: string;
+    content: any;
+  }>> {
+    const response = await api.get<ApiResponse<{
+      id: string;
+      originalName: string;
+      status: string;
+      content: any;
+    }>>(`/documents/${id}/content`);
+    return response.data;
+  },
+
+  /**
    * Retrieve real document statistics
    */
   async getDocumentStats(): Promise<ApiResponse<{ stats: DocumentStats }>> {

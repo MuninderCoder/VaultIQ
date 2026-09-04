@@ -13,7 +13,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  Play,
+  RotateCw,
+  BookOpen
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -64,14 +67,25 @@ export const DocumentsPage: React.FC = () => {
   const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
+  // Content viewer modal state (Phase 3)
+  const [viewingContentDoc, setViewingContentDoc] = useState<DocumentItem | null>(null);
+  const [documentContent, setDocumentContent] = useState<any | null>(null);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
+
+  // Processing state
+  const [processingDocIds, setProcessingDocIds] = useState<Record<string, boolean>>({});
+
   // Delete modal state
   const [documentToDelete, setDocumentToDelete] = useState<DocumentItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch documents from server
-  const fetchDocuments = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchDocuments = useCallback(async (silent: boolean = false) => {
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const response = await documentService.getDocuments({
         page: currentPage,
@@ -85,13 +99,29 @@ export const DocumentsPage: React.FC = () => {
         setPagination(response.data.pagination);
       }
     } catch (err: any) {
-      setError(
-        err.response?.data?.message || 'Failed to retrieve documents. Please try again.'
-      );
+      if (!silent) {
+        setError(
+          err.response?.data?.message || 'Failed to retrieve documents. Please try again.'
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [currentPage, searchQuery, activeStatus]);
+
+  // Polling effect: poll every 2 seconds when any document is in PROCESSING state
+  useEffect(() => {
+    const hasProcessing = documents.some((doc) => doc.status === 'PROCESSING');
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      fetchDocuments(true);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [documents, fetchDocuments]);
 
   useEffect(() => {
     fetchDocuments();
@@ -198,6 +228,41 @@ export const DocumentsPage: React.FC = () => {
       await documentService.downloadDocument(doc._id, doc.originalName);
     } catch {
       alert('Failed to download document. Please try again.');
+    }
+  };
+
+  // Phase 3: Trigger document processing
+  const handleProcessDocument = async (doc: DocumentItem) => {
+    setProcessingDocIds((prev) => ({ ...prev, [doc._id]: true }));
+    try {
+      await documentService.processDocument(doc._id);
+      fetchDocuments(true);
+    } catch (err: any) {
+      alert(err.response?.data?.message || err.message || 'Failed to trigger document processing');
+      fetchDocuments(true);
+    } finally {
+      setProcessingDocIds((prev) => ({ ...prev, [doc._id]: false }));
+    }
+  };
+
+  // Phase 3: Open extracted content viewer modal
+  const handleOpenContentViewer = async (doc: DocumentItem) => {
+    setViewingContentDoc(doc);
+    setDocumentContent(null);
+    setIsLoadingContent(true);
+    setContentError(null);
+
+    try {
+      const response = await documentService.getDocumentContent(doc._id);
+      if (response.success && response.data) {
+        setDocumentContent(response.data.content);
+      }
+    } catch (err: any) {
+      setContentError(
+        err.response?.data?.message || 'Failed to load document content. Please try again.'
+      );
+    } finally {
+      setIsLoadingContent(false);
     }
   };
 
@@ -485,6 +550,51 @@ export const DocumentsPage: React.FC = () => {
                     {/* Actions */}
                     <td className="px-6 py-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1">
+                        {/* Process / Re-process Button */}
+                        {(doc.status === 'UPLOADED' || doc.status === 'FAILED') && (
+                          <button
+                            onClick={() => handleProcessDocument(doc)}
+                            disabled={processingDocIds[doc._id]}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              doc.status === 'FAILED'
+                                ? 'text-amber-600 hover:bg-amber-50'
+                                : 'text-brand-600 hover:bg-brand-50'
+                            }`}
+                            title={doc.status === 'FAILED' ? 'Retry Processing' : 'Process Document'}
+                            aria-label={`${doc.status === 'FAILED' ? 'Retry' : 'Process'} ${doc.originalName}`}
+                          >
+                            {processingDocIds[doc._id] ? (
+                              <RotateCw className="w-4 h-4 animate-spin text-brand-600" />
+                            ) : doc.status === 'FAILED' ? (
+                              <RotateCw className="w-4 h-4" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+
+                        {/* Processing Spinner */}
+                        {doc.status === 'PROCESSING' && (
+                          <span
+                            className="p-1.5 inline-flex items-center text-amber-500"
+                            title="Currently processing..."
+                          >
+                            <RotateCw className="w-4 h-4 animate-spin" />
+                          </span>
+                        )}
+
+                        {/* View Extracted Content Button */}
+                        {doc.status === 'PROCESSED' && (
+                          <button
+                            onClick={() => handleOpenContentViewer(doc)}
+                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            title="View Extracted Content"
+                            aria-label={`View extracted content of ${doc.originalName}`}
+                          >
+                            <BookOpen className="w-4 h-4" />
+                          </button>
+                        )}
+
                         <button
                           onClick={() => {
                             setSelectedDocument(doc);
@@ -789,6 +899,65 @@ export const DocumentsPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Extraction error if FAILED */}
+            {selectedDocument.status === 'FAILED' && selectedDocument.processingError && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">
+                <span className="font-semibold block mb-0.5">Extraction Failed</span>
+                <p className="text-xs text-rose-700">{selectedDocument.processingError}</p>
+                <div className="mt-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setIsDetailsModalOpen(false);
+                      handleProcessDocument(selectedDocument);
+                    }}
+                    leftIcon={<RotateCw className="w-3.5 h-3.5" />}
+                  >
+                    Retry Extraction
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Extracted content summary if PROCESSED */}
+            {selectedDocument.status === 'PROCESSED' && selectedDocument.content && (
+              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold flex items-center gap-1.5 text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Extracted Text Metrics
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setIsDetailsModalOpen(false);
+                      handleOpenContentViewer(selectedDocument);
+                    }}
+                    leftIcon={<BookOpen className="w-3.5 h-3.5" />}
+                  >
+                    View Full Text
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs text-emerald-800">
+                  <div>
+                    <span className="text-emerald-600 text-[10px] uppercase font-semibold block">Characters</span>
+                    <span className="font-bold">{selectedDocument.content.characterCount?.toLocaleString() || 0}</span>
+                  </div>
+                  <div>
+                    <span className="text-emerald-600 text-[10px] uppercase font-semibold block">Words</span>
+                    <span className="font-bold">{selectedDocument.content.wordCount?.toLocaleString() || 0}</span>
+                  </div>
+                  {selectedDocument.content.pageCount !== undefined && (
+                    <div>
+                      <span className="text-emerald-600 text-[10px] uppercase font-semibold block">Pages</span>
+                      <span className="font-bold">{selectedDocument.content.pageCount}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {selectedDocument.metadata?.description && (
               <div>
                 <span className="text-slate-500 font-semibold block mb-1">Description</span>
@@ -858,6 +1027,90 @@ export const DocumentsPage: React.FC = () => {
               This action cannot be undone.
             </p>
           </div>
+        </Modal>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: Extracted Content Viewer Modal (Phase 3) */}
+      {/* ========================================================================= */}
+      {viewingContentDoc && (
+        <Modal
+          isOpen={true}
+          onClose={() => {
+            setViewingContentDoc(null);
+            setDocumentContent(null);
+            setContentError(null);
+          }}
+          title={`Extracted Content: ${viewingContentDoc.metadata?.title || viewingContentDoc.originalName}`}
+          description="Normalized document text extracted by the Phase 3 pipeline"
+          maxWidth="2xl"
+          footer={
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-slate-400 font-medium">
+                {documentContent
+                  ? `${documentContent.characterCount?.toLocaleString()} chars • ${documentContent.wordCount?.toLocaleString()} words${
+                      documentContent.pageCount ? ` • ${documentContent.pageCount} pages` : ''
+                    }`
+                  : ''}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setViewingContentDoc(null);
+                  setDocumentContent(null);
+                  setContentError(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          }
+        >
+          {isLoadingContent && (
+            <div className="py-12 flex flex-col items-center justify-center">
+              <LoadingSpinner size="lg" color="brand" />
+              <p className="text-xs text-slate-400 mt-2 font-medium">Loading extracted text...</p>
+            </div>
+          )}
+
+          {!isLoadingContent && contentError && (
+            <div className="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+              <p className="font-semibold mb-1">Failed to load extracted content</p>
+              <p>{contentError}</p>
+            </div>
+          )}
+
+          {!isLoadingContent && !contentError && documentContent && (
+            <div className="space-y-4">
+              {/* Extraction Metadata Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold block">Characters</span>
+                  <span className="font-bold text-slate-800">{documentContent.characterCount?.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold block">Words</span>
+                  <span className="font-bold text-slate-800">{documentContent.wordCount?.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold block">Pages</span>
+                  <span className="font-bold text-slate-800">{documentContent.pageCount !== undefined ? documentContent.pageCount : 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold block">Processed At</span>
+                  <span className="font-medium text-slate-700">
+                    {documentContent.processedAt ? new Date(documentContent.processedAt).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Text Body with Paragraph Separation */}
+              <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 font-mono text-xs text-slate-800 leading-relaxed whitespace-pre-wrap select-text">
+                {documentContent.text || 'No text extracted.'}
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </div>

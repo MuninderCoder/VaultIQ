@@ -57,6 +57,14 @@ export class LocalStorageService implements IStorageService {
     return fs.createReadStream(filePath);
   }
 
+  async getBuffer(storagePath: string): Promise<Buffer> {
+    const filePath = this.resolvePath(storagePath);
+    if (!fs.existsSync(filePath)) {
+      throw new Error('File not found in storage');
+    }
+    return fs.promises.readFile(filePath);
+  }
+
   async delete(storagePath: string): Promise<void> {
     const filePath = this.resolvePath(storagePath);
     if (fs.existsSync(filePath)) {

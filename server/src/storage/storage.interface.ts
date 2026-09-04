@@ -29,6 +29,12 @@ export interface IStorageService {
   exists(storagePath: string): Promise<boolean>;
 
   /**
+   * Retrieves the raw Buffer of a stored file for internal processing.
+   * @param storagePath The storage path returned during upload.
+   */
+  getBuffer(storagePath: string): Promise<Buffer>;
+
+  /**
    * Resolves the full physical path or URI for internal operations.
    * @param storagePath The storage path.
    */

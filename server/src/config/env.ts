@@ -16,7 +16,8 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default('http://localhost:3000'),
   API_VERSION: z.string().default('v1'),
   UPLOAD_DIR: z.string().default('./uploads'),
-  MAX_FILE_SIZE_MB: z.string().default('25').transform((val) => parseInt(val, 10))
+  MAX_FILE_SIZE_MB: z.string().default('25').transform((val) => parseInt(val, 10)),
+  MAX_EXTRACTED_TEXT_SIZE_MB: z.string().default('10').transform((val) => parseInt(val, 10))
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

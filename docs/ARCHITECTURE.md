@@ -160,26 +160,80 @@ sequenceDiagram
 
 ---
 
-## 5. Security Controls Summary
+## 6. Document Processing & Text Extraction Pipeline (Phase 3)
 
-1. **Path Traversal Defense**: All storage paths are resolved through canonical absolute paths and checked with `path.relative(baseDir, resolved).startsWith('..')`.
-2. **Ownership Isolation**: Users cannot view, download, or delete documents belonging to another user. Attempts return `404 Not Found` to prevent metadata leakage.
-3. **MIME-Type & Magic-Byte Validation**: Files are checked against cryptographic file headers before disk writes.
-4. **File Size Enforcement**: 25 MB limit enforced in Multer and storage services.
-5. **No Secrets in Repository**: Secrets and local paths are isolated in `.env` (ignored by Git) with `.env.example` as a template.
+VaultIQ Phase 3 establishes a robust, decoupled text extraction pipeline converting uploaded document binaries into normalized plain text.
+
+```
+                    ┌────────────────────────────┐
+                    │ POST /:id/process endpoint │
+                    └─────────────┬──────────────┘
+                                  │ Atomic update: status -> 'PROCESSING'
+                                  ▼
+                    ┌────────────────────────────┐
+                    │    IStorageService         │
+                    │    .getBuffer(storagePath) │
+                    └─────────────┬──────────────┘
+                                  │ Binary Buffer
+                                  ▼
+                    ┌────────────────────────────┐
+                    │     ProcessorFactory       │
+                    └──────┬──────┬──────┬───────┘
+                           │      │      │       │
+          ┌────────────────┘      │      │       └────────────────┐
+          ▼                       ▼      ▼                        ▼
+  ┌──────────────┐        ┌──────────────┐      ┌───────────────┐ ┌────────────────┐
+  │ PdfProcessor │        │DocxProcessor │      │ TextProcessor │ │ TextProcessor  │
+  │ (pdf-parse)  │        │  (mammoth)   │      │   (.txt)      │ │   (.md)        │
+  └───────┬──────┘        └──────┬───────┘      └───────┬───────┘ └────────┬───────┘
+          │                      │                      │                  │
+          └──────────────────────┴──────────┬───────────┴──────────────────┘
+                                            │ Raw text
+                                            ▼
+                              ┌───────────────────────────┐
+                              │      TextNormalizer       │
+                              │ - Normalize CRLF -> LF    │
+                              │ - Strip non-printable ASCII│
+                              │ - Collapse multi-spaces   │
+                              │ - Max 2 newlines (paras)  │
+                              │ - Count chars & words     │
+                              └─────────────┬─────────────┘
+                                            │
+                                            ▼
+                             Size check: <= MAX_EXTRACTED_TEXT_SIZE_MB (10 MB)
+                                            │
+                     ┌──────────────────────┴──────────────────────┐
+                     ▼                                             ▼
+          Success: status -> 'PROCESSED'               Failure: status -> 'FAILED'
+          content: { text, characterCount,             processingError: sanitized message
+                     wordCount, pageCount, ... }
+```
 
 ---
 
-## 6. Future Roadmap Context
+## 7. Security Controls Summary
+
+1. **Path Traversal Defense**: All storage paths are resolved through canonical absolute paths and checked with `path.relative(baseDir, resolved).startsWith('..')`.
+2. **Ownership Isolation**: Users cannot view, download, process, or delete documents belonging to another user. Attempts return `404 Not Found` to prevent metadata leakage.
+3. **MIME-Type & Magic-Byte Validation**: Files are checked against cryptographic file headers before disk writes.
+4. **File Size Enforcement**: 25 MB file upload limit and 10 MB post-normalization extracted text limit.
+5. **Safe Error Messages**: Error stack traces, internal paths, and system details are stripped before reaching API responses or the frontend.
+6. **No Secrets in Repository**: Secrets and local paths are isolated in `.env` (ignored by Git) with `.env.example` as a template.
+
+---
+
+## 8. Multi-Phase Progression Context
 
 ```
  Phase 1: Foundation (Complete)
      ↓
  Phase 2: Document Management & Secure Storage (Complete)
      ↓
- Phase 3: Document Processing & Chunking (Next)
+ Phase 3: Document Processing & Text Extraction (Complete)
      ↓
- Phase 4: Vector Search & Hybrid Retrieval
+ Phase 4: Document Indexing & Chunking (Next)
      ↓
- Phase 5: RAG & AI Knowledge Assistant
+ Phase 5: Vector Search & Hybrid Retrieval
+     ↓
+ Phase 6: RAG & AI Knowledge Assistant
 ```

@@ -8,42 +8,27 @@ import {
   ArrowUpRight,
   Server,
   Database,
-  Clock,
   CheckCircle2,
   FileText,
-  HardDrive
+  HardDrive,
+  RotateCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/Card';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
-import { checkHealth } from '../services/healthService';
 import { documentService } from '../services/documentService';
-import { HealthData } from '../types';
 import { DocumentStats } from '../types/document';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [health, setHealth] = useState<HealthData | null>(null);
-  const [healthError, setHealthError] = useState(false);
   const [docStats, setDocStats] = useState<DocumentStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
-
-    // Fetch system health
-    checkHealth()
-      .then((res) => {
-        if (isMounted && res.success && res.data) {
-          setHealth(res.data);
-        }
-      })
-      .catch(() => {
-        if (isMounted) setHealthError(true);
-      });
 
     // Fetch real document stats
     documentService
@@ -135,6 +120,57 @@ export const DashboardPage: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Processed Documents */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Processed (Extracted)
+              </span>
+              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <span className="text-2xl font-bold text-slate-900">
+                {isLoadingStats ? '—' : docStats?.processedCount ?? 0}
+              </span>
+              <span className="ml-2 text-xs text-slate-400">
+                {docStats?.processedCount === 1 ? 'document' : 'documents'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Normalized text ready
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* In Processing or Pending */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Processing / Uploaded
+              </span>
+              <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+                <RotateCw className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <span className="text-2xl font-bold text-slate-900">
+                {isLoadingStats
+                  ? '—'
+                  : `${docStats?.processingCount ?? 0} / ${docStats?.uploadedCount ?? 0}`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              Active queue / pending extraction
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Total Storage Used */}
         <Card>
           <CardContent className="p-5">
@@ -153,52 +189,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-              Max 25 MB / file limit
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Active Identity */}
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Active Identity
-              </span>
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
-                <CheckCircle2 className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <span className="text-base font-semibold text-slate-900 truncate block">
-                {user?.email}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Role: <span className="font-medium text-slate-700">{user?.role}</span>
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* API Gateway Status */}
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                API Gateway
-              </span>
-              <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
-                <Server className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <span className="text-lg font-bold text-slate-900">
-                {healthError ? 'Degraded' : health?.status === 'operational' ? 'v1 REST Online' : 'Checking'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              Uptime: {health?.uptimeSeconds !== undefined ? `${health.uptimeSeconds}s` : '—'}
+              {docStats?.failedCount ? `${docStats.failedCount} failed extractions` : 'Max 25 MB / file'}
             </p>
           </CardContent>
         </Card>

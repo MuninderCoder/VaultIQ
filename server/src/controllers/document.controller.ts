@@ -168,4 +168,83 @@ export class DocumentController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/v1/documents/:id/process
+   * Trigger text extraction processing for a document
+   */
+  static async processDocument(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.user) {
+        ApiResponseHandler.error(res, 'Authentication required', null, 401);
+        return;
+      }
+
+      const document = await DocumentService.processDocument(
+        req.user.userId,
+        req.params.id
+      );
+
+      ApiResponseHandler.success(res, 'Document processed successfully', { document });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/documents/:id/processing
+   * Query processing status and extraction metrics
+   */
+  static async getProcessingStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.user) {
+        ApiResponseHandler.error(res, 'Authentication required', null, 401);
+        return;
+      }
+
+      const status = await DocumentService.getProcessingStatus(
+        req.user.userId,
+        req.params.id
+      );
+
+      ApiResponseHandler.success(res, 'Processing status retrieved successfully', { status });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/documents/:id/content
+   * Retrieve normalized extracted text and metadata
+   */
+  static async getDocumentContent(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.user) {
+        ApiResponseHandler.error(res, 'Authentication required', null, 401);
+        return;
+      }
+
+      const result = await DocumentService.getDocumentContent(
+        req.user.userId,
+        req.params.id
+      );
+
+      ApiResponseHandler.success(res, 'Document content retrieved successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
+

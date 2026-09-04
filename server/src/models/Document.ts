@@ -8,6 +8,16 @@ export interface IDocumentMetadata {
   tags?: string[];
 }
 
+export interface IDocumentContent {
+  text: string;
+  characterCount: number;
+  wordCount: number;
+  pageCount?: number;
+  metadata?: Record<string, any>;
+  processedAt: Date;
+  processingVersion: string;
+}
+
 export interface IDocument extends MongooseDocument {
   _id: Types.ObjectId;
   owner: Types.ObjectId;
@@ -18,7 +28,9 @@ export interface IDocument extends MongooseDocument {
   size: number;
   storagePath: string;
   status: DocumentStatus;
+  processingError?: string | null;
   metadata: IDocumentMetadata;
+  content?: IDocumentContent;
   uploadedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -70,6 +82,10 @@ const documentSchema = new Schema<IDocument>(
       required: true,
       index: true
     },
+    processingError: {
+      type: String,
+      default: null
+    },
     metadata: {
       title: {
         type: String,
@@ -82,6 +98,29 @@ const documentSchema = new Schema<IDocument>(
       tags: {
         type: [String],
         default: []
+      }
+    },
+    content: {
+      text: {
+        type: String
+      },
+      characterCount: {
+        type: Number
+      },
+      wordCount: {
+        type: Number
+      },
+      pageCount: {
+        type: Number
+      },
+      metadata: {
+        type: Schema.Types.Mixed
+      },
+      processedAt: {
+        type: Date
+      },
+      processingVersion: {
+        type: String
       }
     },
     uploadedAt: {

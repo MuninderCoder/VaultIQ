@@ -3,6 +3,8 @@ import path from 'path';
 import { Types } from 'mongoose';
 import { DocumentModel, IDocument, DocumentStatus } from '../models/Document';
 import { localStorageService } from '../storage/local.storage';
+import { ProcessorFactory } from '../processors/processor.factory';
+import { env } from '../config/env';
 import { DocumentListQuery } from '../validators/document.validator';
 import { logger } from '../utils/logger';
 
@@ -15,6 +17,10 @@ export interface DocumentUploadInput {
 export interface DocumentStatsResult {
   totalDocuments: number;
   totalStorageUsed: number;
+  processedCount: number;
+  processingCount: number;
+  failedCount: number;
+  uploadedCount: number;
   recentDocuments: Array<{
     id: string;
     originalName: string;
@@ -235,12 +241,173 @@ export class DocumentService {
   }
 
   /**
+   * Processes a document by extracting and normalizing text content.
+   * Atomic transition prevents concurrent processing races.
+   */
+  static async processDocument(userId: string, documentId: string): Promise<IDocument> {
+    const ownerId = new Types.ObjectId(userId);
+
+    // Atomically transition from UPLOADED, PROCESSED, or FAILED to PROCESSING
+    const document = await DocumentModel.findOneAndUpdate(
+      {
+        _id: documentId,
+        owner: ownerId,
+        status: { $in: ['UPLOADED', 'PROCESSED', 'FAILED'] }
+      },
+      {
+        $set: {
+          status: 'PROCESSING',
+          processingError: null
+        }
+      },
+      { new: true }
+    );
+
+    if (!document) {
+      // Check if it already exists or is currently PROCESSING
+      const existing = await DocumentModel.findOne({ _id: documentId, owner: ownerId });
+      if (!existing) {
+        const error = new Error('Document not found');
+        (error as any).statusCode = 404;
+        throw error;
+      }
+      if (existing.status === 'PROCESSING') {
+        const error = new Error('Document is currently being processed');
+        (error as any).statusCode = 409;
+        throw error;
+      }
+      const error = new Error('Document cannot be processed from its current state');
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    try {
+      logger.info(`Starting extraction for document: ${document._id} (${document.originalName})`);
+
+      // 1. Retrieve file binary buffer from storage abstraction
+      const exists = await localStorageService.exists(document.storagePath);
+      if (!exists) {
+        throw new Error('Physical document file is missing from storage');
+      }
+      const buffer = await localStorageService.getBuffer(document.storagePath);
+
+      // 2. Select matching processor
+      const processor = ProcessorFactory.getProcessor(document.mimeType, document.originalName);
+
+      // 3. Extract and normalize content
+      const result = await processor.process(buffer, document.originalName);
+
+      // 4. Enforce MAX_EXTRACTED_TEXT_SIZE_MB limit post-normalization
+      const textSizeBytes = Buffer.byteLength(result.text, 'utf-8');
+      const maxAllowedBytes = env.MAX_EXTRACTED_TEXT_SIZE_MB * 1024 * 1024;
+      if (textSizeBytes > maxAllowedBytes) {
+        throw new Error(
+          `Extracted text size (${(textSizeBytes / (1024 * 1024)).toFixed(2)} MB) exceeds configured limit of ${env.MAX_EXTRACTED_TEXT_SIZE_MB} MB`
+        );
+      }
+
+      // 5. Update document with extracted content and PROCESSED status
+      document.content = {
+        text: result.text,
+        characterCount: result.characterCount,
+        wordCount: result.wordCount,
+        pageCount: result.pageCount,
+        metadata: result.metadata,
+        processedAt: new Date(),
+        processingVersion: '1.0'
+      };
+      document.status = 'PROCESSED';
+      document.processingError = null;
+      await document.save();
+
+      logger.info(
+        `Document ${document._id} successfully processed: ${result.characterCount} chars, ${result.wordCount} words`
+      );
+      return document;
+    } catch (err: any) {
+      logger.error(`Document processing failed for ${documentId}:`, err);
+      // Clean, user-safe error message without leaking stack traces or absolute paths
+      const safeErrorMessage = err.message || 'An error occurred during text extraction';
+      
+      document.status = 'FAILED';
+      document.processingError = safeErrorMessage;
+      await document.save().catch((saveErr) => {
+        logger.error(`Failed to record FAILED status for document ${documentId}:`, saveErr);
+      });
+
+      throw err;
+    }
+  }
+
+  /**
+   * Retrieves current processing status and metrics for a document
+   */
+  static async getProcessingStatus(
+    userId: string,
+    documentId: string
+  ): Promise<{
+    id: string;
+    status: DocumentStatus;
+    processingError?: string | null;
+    characterCount?: number;
+    wordCount?: number;
+    pageCount?: number;
+    processedAt?: Date;
+  }> {
+    const document = await this.getDocumentById(userId, documentId);
+
+    return {
+      id: document._id.toString(),
+      status: document.status,
+      processingError: document.processingError,
+      characterCount: document.content?.characterCount,
+      wordCount: document.content?.wordCount,
+      pageCount: document.content?.pageCount,
+      processedAt: document.content?.processedAt
+    };
+  }
+
+  /**
+   * Retrieves extracted text content for a processed document
+   */
+  static async getDocumentContent(
+    userId: string,
+    documentId: string
+  ): Promise<{
+    id: string;
+    originalName: string;
+    status: DocumentStatus;
+    content: IDocument['content'];
+  }> {
+    const document = await this.getDocumentById(userId, documentId);
+
+    if (document.status !== 'PROCESSED' || !document.content) {
+      const error = new Error(
+        document.status === 'PROCESSING'
+          ? 'Document is currently being processed'
+          : document.status === 'FAILED'
+          ? `Document processing failed: ${document.processingError || 'Unknown error'}`
+          : 'Document has not been processed yet'
+      );
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    return {
+      id: document._id.toString(),
+      originalName: document.originalName,
+      status: document.status,
+      content: document.content
+    };
+  }
+
+  /**
    * Aggregates real document statistics for authenticated user
    */
   static async getDocumentStats(userId: string): Promise<DocumentStatsResult> {
     const ownerId = new Types.ObjectId(userId);
 
-    const [totalCount, totalStorageAgg, recentDocs, extAgg] = await Promise.all([
+    const [totalCount, totalStorageAgg, recentDocs, extAgg, statusAgg] = await Promise.all([
       DocumentModel.countDocuments({ owner: ownerId }),
       DocumentModel.aggregate([
         { $match: { owner: ownerId } },
@@ -254,6 +421,10 @@ export class DocumentService {
       DocumentModel.aggregate([
         { $match: { owner: ownerId } },
         { $group: { _id: '$extension', count: { $sum: 1 } } }
+      ]),
+      DocumentModel.aggregate([
+        { $match: { owner: ownerId } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
       ])
     ]);
 
@@ -266,9 +437,25 @@ export class DocumentService {
       }
     });
 
+    const statusCounts: Record<string, number> = {
+      UPLOADED: 0,
+      PROCESSING: 0,
+      PROCESSED: 0,
+      FAILED: 0
+    };
+    statusAgg.forEach((item) => {
+      if (item._id) {
+        statusCounts[item._id] = item.count;
+      }
+    });
+
     return {
       totalDocuments: totalCount,
       totalStorageUsed,
+      processedCount: statusCounts.PROCESSED || 0,
+      processingCount: statusCounts.PROCESSING || 0,
+      failedCount: statusCounts.FAILED || 0,
+      uploadedCount: statusCounts.UPLOADED || 0,
       recentDocuments: recentDocs.map((doc) => ({
         id: doc._id.toString(),
         originalName: doc.originalName,

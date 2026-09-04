@@ -6,6 +6,16 @@ export interface DocumentMetadata {
   tags?: string[];
 }
 
+export interface DocumentContent {
+  text: string;
+  characterCount: number;
+  wordCount: number;
+  pageCount?: number;
+  metadata?: Record<string, any>;
+  processedAt: string;
+  processingVersion: string;
+}
+
 export interface DocumentItem {
   _id: string;
   owner: string;
@@ -16,7 +26,9 @@ export interface DocumentItem {
   size: number;
   storagePath: string;
   status: DocumentStatus;
+  processingError?: string | null;
   metadata: DocumentMetadata;
+  content?: DocumentContent;
   uploadedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -39,6 +51,10 @@ export interface DocumentListResponseData {
 export interface DocumentStats {
   totalDocuments: number;
   totalStorageUsed: number;
+  processedCount: number;
+  processingCount: number;
+  failedCount: number;
+  uploadedCount: number;
   recentDocuments: Array<{
     id: string;
     originalName: string;
@@ -54,4 +70,21 @@ export interface DocumentUploadInput {
   title?: string;
   description?: string;
   tags?: string;
+}
+
+export interface ProcessingStatusResponse {
+  id: string;
+  status: DocumentStatus;
+  processingError?: string | null;
+  characterCount?: number;
+  wordCount?: number;
+  pageCount?: number;
+  processedAt?: string;
+}
+
+export interface DocumentContentResponse {
+  id: string;
+  originalName: string;
+  status: DocumentStatus;
+  content: DocumentContent;
 }
