@@ -5,6 +5,7 @@ import { RagService } from '../rag/rag.service';
 import { IRagService, IRagResult } from '../rag/rag.interface';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { AuditService } from './audit.service';
 
 export interface SendMessageResult {
   userMessage: IMessage;
@@ -29,15 +30,31 @@ export class ChatService {
    */
   public static async createConversation(
     userId: string,
-    title?: string
+    title?: string,
+    organizationId?: string
   ): Promise<IConversation> {
     const ownerId = new Types.ObjectId(userId);
     const initialTitle = title?.trim() || 'New Conversation';
+    const orgObjectId = organizationId && Types.ObjectId.isValid(organizationId)
+      ? new Types.ObjectId(organizationId)
+      : null;
 
     const conversation = await ConversationModel.create({
       owner: ownerId,
+      organizationId: orgObjectId,
       title: initialTitle
     });
+
+    if (orgObjectId) {
+      await AuditService.log({
+        organizationId: orgObjectId,
+        actorId: ownerId,
+        action: 'CONVERSATION_CREATED',
+        resourceType: 'CONVERSATION',
+        resourceId: conversation._id.toString(),
+        metadata: { title: conversation.title }
+      });
+    }
 
     logger.info(`Created conversation ${conversation._id} for user ${userId}`);
     return conversation;
@@ -49,18 +66,26 @@ export class ChatService {
   public static async listConversations(
     userId: string,
     limit: number = 50,
-    page: number = 1
+    page: number = 1,
+    organizationId?: string
   ): Promise<{ conversations: IConversation[]; total: number }> {
     const ownerId = new Types.ObjectId(userId);
     const skip = (Math.max(1, page) - 1) * limit;
 
+    const filter: any = { owner: ownerId };
+    if (organizationId && Types.ObjectId.isValid(organizationId)) {
+      filter.organizationId = new Types.ObjectId(organizationId);
+    } else {
+      filter.organizationId = null;
+    }
+
     const [conversations, total] = await Promise.all([
-      ConversationModel.find({ owner: ownerId })
+      ConversationModel.find(filter)
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      ConversationModel.countDocuments({ owner: ownerId })
+      ConversationModel.countDocuments(filter)
     ]);
 
     return { conversations: conversations as unknown as IConversation[], total };
@@ -71,15 +96,18 @@ export class ChatService {
    */
   public static async getConversationById(
     userId: string,
-    conversationId: string
+    conversationId: string,
+    organizationId?: string
   ): Promise<{ conversation: IConversation; messages: IMessage[] }> {
     const ownerId = new Types.ObjectId(userId);
     const convId = new Types.ObjectId(conversationId);
 
-    const conversation = await ConversationModel.findOne({
-      _id: convId,
-      owner: ownerId
-    });
+    const filter: any = { _id: convId, owner: ownerId };
+    if (organizationId) {
+      filter.organizationId = new Types.ObjectId(organizationId);
+    }
+
+    const conversation = await ConversationModel.findOne(filter);
 
     if (!conversation) {
       const error = new Error('Conversation not found');
@@ -105,15 +133,18 @@ export class ChatService {
    */
   public static async deleteConversation(
     userId: string,
-    conversationId: string
+    conversationId: string,
+    organizationId?: string
   ): Promise<void> {
     const ownerId = new Types.ObjectId(userId);
     const convId = new Types.ObjectId(conversationId);
 
-    const conversation = await ConversationModel.findOneAndDelete({
-      _id: convId,
-      owner: ownerId
-    });
+    const filter: any = { _id: convId, owner: ownerId };
+    if (organizationId) {
+      filter.organizationId = new Types.ObjectId(organizationId);
+    }
+
+    const conversation = await ConversationModel.findOneAndDelete(filter);
 
     if (!conversation) {
       const error = new Error('Conversation not found');
@@ -144,16 +175,19 @@ export class ChatService {
   public static async sendMessage(
     userId: string,
     conversationId: string,
-    text: string
+    text: string,
+    organizationId?: string
   ): Promise<SendMessageResult> {
     const ownerId = new Types.ObjectId(userId);
     const convId = new Types.ObjectId(conversationId);
 
-    // 1. Strict ownership verification
-    const conversation = await ConversationModel.findOne({
-      _id: convId,
-      owner: ownerId
-    });
+    // 1. Strict ownership and organization isolation verification
+    const filter: any = { _id: convId, owner: ownerId };
+    if (organizationId) {
+      filter.organizationId = new Types.ObjectId(organizationId);
+    }
+
+    const conversation = await ConversationModel.findOne(filter);
 
     if (!conversation) {
       const error = new Error('Conversation not found');
@@ -187,11 +221,14 @@ export class ChatService {
         content: m.content
       }));
 
-    // 4. Run RAG pipeline (consumes SearchService with user tenant isolation)
+    const resolvedOrgId = conversation.organizationId?.toString() || organizationId;
+
+    // 4. Run RAG pipeline (consumes SearchService with organization tenant isolation)
     const ragResult: IRagResult = await this.ragService.generateAnswer(
       userId,
       text.trim(),
-      formattedHistory
+      formattedHistory,
+      resolvedOrgId
     );
 
     // 5. Map and persist assistant message with sources

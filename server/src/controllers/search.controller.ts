@@ -22,7 +22,7 @@ export class SearchController {
       const query = (req.query.q as string) || '';
       const limit = typeof req.query.limit === 'number' ? req.query.limit : parseInt((req.query.limit as string) || '10', 10);
 
-      const result = await SearchService.searchSemantic(req.user.userId, query, limit);
+      const result = await SearchService.searchSemantic(req.user.userId, query, limit, req.organizationId || (req.query as any).organizationId);
 
       ApiResponseHandler.success(res, 'Semantic search completed successfully', result);
     } catch (error) {

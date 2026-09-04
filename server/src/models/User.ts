@@ -67,3 +67,4 @@ userSchema.methods.toProfile = function (): IUserProfile {
 };
 
 export const User = model<IUserDocument>('User', userSchema);
+export const UserModel = User;

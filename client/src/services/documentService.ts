@@ -36,6 +36,9 @@ export const documentService = {
     if (metadata?.tags) {
       formData.append('tags', metadata.tags);
     }
+    if (metadata?.visibility) {
+      formData.append('visibility', metadata.visibility);
+    }
 
     const response = await api.post<ApiResponse<{ document: DocumentItem }>>(
       '/documents',

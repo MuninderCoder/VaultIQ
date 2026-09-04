@@ -316,7 +316,84 @@ VaultIQ Phase 5 transforms Phase 4 semantic retrieval into a secure, grounded co
 
 ---
 
-## 10. Multi-Phase Progression Context
+## 10. Enterprise Collaboration & Access Governance (Phase 6)
+
+VaultIQ Phase 6 transitions the application into an organization-aware enterprise knowledge platform with hierarchical tenancy, RBAC authorization, and immutable audit logs:
+
+```
+                      ┌────────────────────────────┐
+                      │  Client Request + JWT      │
+                      │  Header: x-organization-id │
+                      └─────────────┬──────────────┘
+                                    │
+                                    ▼
+                      ┌────────────────────────────┐
+                      │    resolveOrgContext       │
+                      │ 1. Validate org ID format  │
+                      │ 2. Find Org in DB          │
+                      │ 3. Verify Membership in DB │ (Never trust header alone!)
+                      │ 4. Attach req.orgMember    │
+                      └─────────────┬──────────────┘
+                                    │
+                     ┌──────────────┴──────────────┐
+                     ▼                             ▼
+       ┌───────────────────────────┐ ┌───────────────────────────┐
+       │   requireOrgPermission    │ │   AuthorizationService    │
+       │ Route-level guard checks  │ │ Centralized Matrix:       │
+       │ permission against role   │ │ OWNER > ADMIN > EDITOR    │
+       │ (e.g. 'audit.read')       │ │ > VIEWER                  │
+       └───────────────────────────┘ └─────────────┬─────────────┘
+                                                   │
+                                                   ▼
+       ┌─────────────────────────────────────────────────────────┐
+       │           Pre-Retrieval Authorization (Search)          │
+       │  Both Atlas $vectorSearch and Local Cosine pre-filter:  │
+       │  { organizationId: orgId,                               │
+       │    $or: [{ visibility: 'ORGANIZATION' },                │
+       │          { owner: userId }] }                           │
+       │  Unauthorized chunks are NEVER retrieved or ranked      │
+       └───────────────────────────┬─────────────────────────────┘
+                                   │
+                                   ▼
+       ┌─────────────────────────────────────────────────────────┐
+       │             Immutable Append-Only Audit Logging         │
+       │  AuditService.log({ action, actorId, organizationId,    │
+       │                     resourceType, metadata, ip, ua })   │
+       │  - Strips passwords, API keys, tokens, embeddings       │
+       │  - Indexed by { organizationId: 1, createdAt: -1 }      │
+       └─────────────────────────────────────────────────────────┘
+```
+
+### RBAC Permission Matrix
+
+| Permission | OWNER | ADMIN | EDITOR | VIEWER |
+|---|:---:|:---:|:---:|:---:|
+| `organization.read` | ✅ | ✅ | ✅ | ✅ |
+| `organization.update` | ✅ | ✅ | ❌ | ❌ |
+| `organization.delete` | ✅ | ❌ | ❌ | ❌ |
+| `organization.member.read` | ✅ | ✅ | ✅ | ✅ |
+| `organization.member.invite` | ✅ | ✅ | ❌ | ❌ |
+| `organization.member.update` | ✅ | ✅ | ❌ | ❌ |
+| `organization.member.remove` | ✅ | ✅ | ❌ | ❌ |
+| `document.read` | ✅ | ✅ | ✅ | ✅ |
+| `document.create` | ✅ | ✅ | ✅ | ❌ |
+| `document.update` | ✅ | ✅ | ✅ | ❌ |
+| `document.delete` | ✅ | ✅ | ❌ | ❌ |
+| `chat.read` | ✅ | ✅ | ✅ | ✅ |
+| `chat.create` | ✅ | ✅ | ✅ | ✅ |
+| `audit.read` | ✅ | ✅ | ❌ | ❌ |
+
+### Database Models (Phase 6)
+- **`Organization`**: `_id`, `name`, `slug` (unique indexed), `ownerId` (ref User), `timestamps`.
+- **`OrganizationMember`**: `_id`, `organizationId` (ref Organization), `userId` (ref User), `role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`), `joinedAt`. Compound unique index: `{ organizationId: 1, userId: 1 }`.
+- **`AuditLog`**: `_id`, `organizationId`, `actorId`, `action`, `resourceType`, `resourceId`, `metadata` (secret-stripped), `ipAddress`, `userAgent`, `createdAt`. Compound index: `{ organizationId: 1, createdAt: -1 }`.
+- **`Document` (Augmented)**: `organizationId` (ref Organization), `visibility` (`'ORGANIZATION'` | `'PRIVATE'`). Compound indexes: `{ organizationId: 1, createdAt: -1 }`, `{ organizationId: 1, visibility: 1 }`.
+- **`DocumentChunk` (Augmented)**: `organizationId` (ref Organization). Index: `{ organizationId: 1, document: 1 }`.
+- **`Conversation` (Augmented)**: `organizationId` (ref Organization). Index: `{ organizationId: 1, owner: 1, updatedAt: -1 }`.
+
+---
+
+## 11. Multi-Phase Progression Context
 
 ```
  Phase 1: Foundation (Complete ✅)
@@ -329,5 +406,7 @@ VaultIQ Phase 5 transforms Phase 4 semantic retrieval into a secure, grounded co
      ↓
  Phase 5: Grounded RAG & AI Knowledge Assistant (Complete ✅)
      ↓
- Phase 6: Enterprise Collaboration & Intelligence (Next Phase)
+ Phase 6: Enterprise Collaboration & Access Governance (Complete ✅)
+     ↓
+ Phase 7: Testing, Security & Production Deployment (Next Phase)
 ```

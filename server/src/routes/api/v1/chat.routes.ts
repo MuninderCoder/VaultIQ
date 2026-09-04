@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ChatController } from '../../../controllers/chat.controller';
 import { authenticate } from '../../../middleware/auth.middleware';
+import { resolveOrgContext } from '../../../middleware/org.middleware';
 import { validateRequest } from '../../../middleware/validate.middleware';
 import {
   createConversationSchema,
@@ -12,6 +13,7 @@ const router = Router();
 
 // All chat endpoints require JWT authentication
 router.use(authenticate);
+router.use(resolveOrgContext);
 
 router.post(
   '/conversations',

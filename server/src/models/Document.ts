@@ -1,4 +1,5 @@
 import { Schema, model, Document as MongooseDocument, Types } from 'mongoose';
+import { DocumentVisibility } from '../types';
 
 export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
 export type IndexingStatus = 'NOT_INDEXED' | 'INDEXING' | 'INDEXED' | 'INDEX_FAILED';
@@ -22,6 +23,8 @@ export interface IDocumentContent {
 export interface IDocument extends MongooseDocument {
   _id: Types.ObjectId;
   owner: Types.ObjectId;
+  organizationId?: Types.ObjectId | null;
+  visibility: DocumentVisibility;
   originalName: string;
   storedName: string;
   mimeType: string;
@@ -47,6 +50,19 @@ const documentSchema = new Schema<IDocument>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'Document owner is required'],
+      index: true
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      index: true
+    },
+    visibility: {
+      type: String,
+      enum: ['PRIVATE', 'ORGANIZATION'],
+      default: 'PRIVATE',
+      required: true,
       index: true
     },
     originalName: {
@@ -163,5 +179,7 @@ const documentSchema = new Schema<IDocument>(
 documentSchema.index({ owner: 1, uploadedAt: -1 });
 documentSchema.index({ owner: 1, originalName: 1 });
 documentSchema.index({ owner: 1, status: 1 });
+documentSchema.index({ organizationId: 1, createdAt: -1 });
+documentSchema.index({ organizationId: 1, visibility: 1 });
 
 export const DocumentModel = model<IDocument>('Document', documentSchema);

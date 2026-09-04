@@ -6,9 +6,13 @@ import {
   Search,
   MessageSquare,
   Settings,
-  Layers
+  Building,
+  Users,
+  ShieldAlert,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -16,12 +20,20 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
+  const { activeOrganization } = useOrganization();
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Documents', href: '/documents', icon: Files },
     { name: 'Search', href: '/search', icon: Search },
     { name: 'Knowledge Assistant', href: '/chat', icon: MessageSquare },
     { name: 'Settings', href: '/settings', icon: Settings }
+  ];
+
+  const orgNavigation = [
+    { name: 'Org Settings', href: '/organization/settings', icon: Building },
+    { name: 'Members & Roles', href: '/organization/members', icon: Users },
+    { name: 'Audit Logs', href: '/organization/audit-logs', icon: ShieldAlert }
   ];
 
   return (
@@ -43,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
         )}
       >
         <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto">
-          {/* Section Header */}
+          {/* Main Navigation */}
           <div>
             <p className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
               Navigation
@@ -85,17 +97,67 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
               ))}
             </nav>
           </div>
+
+          {/* Enterprise / Organization Navigation */}
+          <div>
+            <div className="px-3 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Enterprise
+              </p>
+              {activeOrganization && (
+                <span className="text-[10px] bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded font-medium truncate max-w-[90px]">
+                  {activeOrganization.name}
+                </span>
+              )}
+            </div>
+            <nav className="mt-3 space-y-1">
+              {orgNavigation.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-brand-50 text-brand-700 font-semibold'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <item.icon
+                          className={cn(
+                            'w-5 h-5 transition-colors',
+                            isActive
+                              ? 'text-brand-600'
+                              : 'text-slate-400 group-hover:text-slate-600'
+                          )}
+                        />
+                        <span>{item.name}</span>
+                      </div>
+                      {isActive && (
+                        <span className="w-1.5 h-4 rounded-full bg-brand-600" />
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
         </div>
 
-        {/* Phase 1 Architecture Indicator */}
+        {/* Phase 6 Architecture Indicator */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/50">
           <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-              <Layers className="w-4 h-4 text-brand-600" />
-              <span>Phase 1 Architecture</span>
+              <ShieldCheck className="w-4 h-4 text-brand-600" />
+              <span>Phase 6 Governance</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-              Production foundation online. Document processing & RAG slated for Phase 2–5.
+              Enterprise multi-tenancy, RBAC matrix, and immutable audit logs active.
             </p>
           </div>
         </div>

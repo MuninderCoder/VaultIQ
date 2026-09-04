@@ -15,9 +15,10 @@ Official Repository: [https://github.com/MuninderCoder/VaultIQ.git](https://gith
 - **Phase 3 — Document Processing & Text Extraction**: Complete (Multi-format text extraction pipeline [PDF, DOCX, TXT, MD], text normalizer, character/word/page metrics, lifecycle management, async processing trigger, processing status query, extracted content retrieval & viewer modal)
 - **Phase 4 — Semantic / Vector Search**: Complete (Boundary-aware character chunking, 1536-dim vector embeddings via OpenAI / deterministic mock, DocumentChunk collection, Atlas Vector Search with local cosine fallback, user isolation, search API & UI)
 - **Phase 5 — RAG & AI Assistant**: Complete (Grounded RAG pipeline consuming Phase 4 search, LLM provider abstraction [OpenAI gpt-4o-mini & deterministic Mock], bounded context builder with similarity thresholding [min 0.5, max 6000 chars], prompt injection defense, controlled zero-hallucination fallback, persistent conversation & message schemas with cascade deletion, chat sidebar, verified source citation cards, phased synthesis UI)
-- **Phase 6 — Enterprise Intelligence & Collaboration**: Next Phase (SSO/SAML, organizational multi-tenancy, RBAC/ABAC, audit logs, team workspaces)
+- **Phase 6 — Enterprise Collaboration & Access Governance**: Complete (Multi-tenancy with Organization & OrganizationMember models, centralized RBAC authorization matrix [OWNER, ADMIN, EDITOR, VIEWER], context selector header x-organization-id with DB membership verification, document collaboration with PRIVATE/ORGANIZATION visibility, pre-retrieval authorization in Atlas and local vector search, tenant-scoped RAG and chat, immutable append-only audit logging with secret sanitation, frontend workspace switcher, members management, and audit log viewer)
+- **Phase 7 — Advanced Analytics & Observability**: Next Phase (System telemetry, query latency analytics, token usage monitoring, cost metrics)
 
-> **Strict Boundary Notice**: Phases 1 through 5 establish enterprise storage, document management, normalized text extraction, vector semantic search, and grounded conversational RAG with strict tenant isolation. Autonomous tool-using agents, agentic workflows, and external analytics are strictly reserved for Phase 6.
+> **Strict Boundary Notice**: Phases 1 through 6 establish enterprise multi-tenancy, RBAC access governance, immutable audit logging, document management, normalized text extraction, vector semantic search, and grounded conversational RAG with strict tenant isolation. Autonomous tool-using agents and ungrounded workflows are strictly excluded.
 
 ---
 
@@ -175,13 +176,24 @@ All endpoints are versioned under `/api/v1/`.
 - **`DELETE /api/v1/chat/conversations/:id`**: Delete a conversation thread with cascade deletion of all contained messages.
 - **`POST /api/v1/chat/conversations/:id/messages`**: Send user message, execute RAG pipeline (retrieval -> context assembly -> prompt defense -> LLM synthesis), persist conversation, and return assistant response with verified citations.
 
+### Enterprise Collaboration & Access Governance (Phase 6)
+- **`POST /api/v1/organizations`**: Create organization workspace and assign creator as OWNER.
+- **`GET /api/v1/organizations`**: List all organizations where the caller has active membership with roles.
+- **`GET /api/v1/organizations/:id`**: Retrieve organization details (membership verified).
+- **`PATCH /api/v1/organizations/:id`**: Update organization name and slug (restricted to OWNER/ADMIN).
+- **`GET /api/v1/organizations/:id/members`**: List organization members and roles.
+- **`POST /api/v1/organizations/:id/members/invite`**: Invite member by email with specific role (OWNER/ADMIN).
+- **`PATCH /api/v1/organizations/:id/members/:userId`**: Update member role with sole OWNER demotion safeguards.
+- **`DELETE /api/v1/organizations/:id/members/:userId`**: Remove member with sole OWNER deletion safeguards.
+- **`GET /api/v1/organizations/:id/audit-logs`**: Query immutable audit logs with pagination and filters (restricted to OWNER/ADMIN).
+
 ---
 
 ## Verification & Testing
 
 Run all automated tests across workspaces:
 ```bash
-# Backend unit & integration tests (64/64 passing across 6 suites)
+# Backend unit & integration tests (95/95 passing across 7 suites)
 npm run test --workspace=server
 
 # TypeScript strict checks across monorepo (0 errors)

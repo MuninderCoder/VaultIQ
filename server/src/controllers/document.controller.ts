@@ -27,7 +27,9 @@ export class DocumentController {
       const metadata = {
         title: req.body?.title,
         description: req.body?.description,
-        tags: req.body?.tags
+        tags: req.body?.tags,
+        visibility: req.body?.visibility,
+        organizationId: req.organizationId || req.body?.organizationId
       };
 
       const document = await DocumentService.uploadDocument(
@@ -57,7 +59,8 @@ export class DocumentController {
         return;
       }
 
-      const result = await DocumentService.getDocuments(req.user.userId, req.query as any);
+      const queryParams = { ...req.query, organizationId: req.organizationId || (req.query as any).organizationId };
+      const result = await DocumentService.getDocuments(req.user.userId, queryParams as any, req.orgMember?.role);
       ApiResponseHandler.success(res, 'Documents retrieved successfully', result);
     } catch (error) {
       next(error);
@@ -79,7 +82,7 @@ export class DocumentController {
         return;
       }
 
-      const stats = await DocumentService.getDocumentStats(req.user.userId);
+      const stats = await DocumentService.getDocumentStats(req.user.userId, req.organizationId || (req.query as any).organizationId);
       ApiResponseHandler.success(res, 'Document statistics retrieved successfully', { stats });
     } catch (error) {
       next(error);
@@ -103,7 +106,9 @@ export class DocumentController {
 
       const document = await DocumentService.getDocumentById(
         req.user.userId,
-        req.params.id
+        req.params.id,
+        req.orgMember?.role,
+        req.organizationId
       );
       ApiResponseHandler.success(res, 'Document retrieved successfully', { document });
     } catch (error) {
@@ -128,7 +133,9 @@ export class DocumentController {
 
       const { stream, document } = await DocumentService.downloadDocument(
         req.user.userId,
-        req.params.id
+        req.params.id,
+        req.orgMember?.role,
+        req.organizationId
       );
 
       // Safe header disposition with RFC 5987 encoding
@@ -162,7 +169,12 @@ export class DocumentController {
         return;
       }
 
-      await DocumentService.deleteDocument(req.user.userId, req.params.id);
+      await DocumentService.deleteDocument(
+        req.user.userId,
+        req.params.id,
+        req.orgMember?.role,
+        req.organizationId
+      );
       ApiResponseHandler.success(res, 'Document deleted successfully', { deleted: true });
     } catch (error) {
       next(error);
@@ -264,7 +276,9 @@ export class DocumentController {
 
       const document = await DocumentService.indexDocument(
         req.user.userId,
-        req.params.id
+        req.params.id,
+        req.orgMember?.role,
+        req.organizationId
       );
 
       ApiResponseHandler.success(res, 'Document indexed successfully', { document });

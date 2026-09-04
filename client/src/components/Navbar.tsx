@@ -3,6 +3,7 @@ import { LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { checkHealth } from '../services/healthService';
 import { Badge } from './Badge';
+import { OrganizationSwitcher } from './OrganizationSwitcher';
 
 interface NavbarProps {
   onToggleSidebar?: () => void;
@@ -68,8 +69,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarOpen }
           </div>
         </div>
 
-        {/* Right: System Status & User Actions */}
-        <div className="flex items-center gap-4">
+        {/* Right: Organization Switcher, System Status & User Actions */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Active Workspace / Organization Selector */}
+          <OrganizationSwitcher />
+
           {/* Live System Health Indicator */}
           <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-200/80 text-xs">
             <span

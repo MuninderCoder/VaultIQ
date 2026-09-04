@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { OrganizationProvider } from './context/OrganizationContext';
 import { AppLayout } from './layouts/AppLayout';
 import { AuthLayout } from './layouts/AuthLayout';
 import { LoginPage } from './pages/LoginPage';
@@ -10,6 +11,9 @@ import { DocumentsPage } from './pages/DocumentsPage';
 import { SearchPage } from './pages/SearchPage';
 import { ChatPage } from './pages/ChatPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { OrganizationSettingsPage } from './pages/OrganizationSettingsPage';
+import { OrganizationMembersPage } from './pages/OrganizationMembersPage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { LoadingSpinner } from './components/LoadingSpinner';
 
@@ -63,38 +67,43 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public Auth Routes */}
-          <Route
-            element={
-              <PublicRoute>
-                <AuthLayout />
-              </PublicRoute>
-            }
-          >
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-          </Route>
+        <OrganizationProvider>
+          <Routes>
+            {/* Public Auth Routes */}
+            <Route
+              element={
+                <PublicRoute>
+                  <AuthLayout />
+                </PublicRoute>
+              }
+            >
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+            </Route>
 
-          {/* Protected Application Routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
+            {/* Protected Application Routes */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/chat" element={<ChatPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/organization/settings" element={<OrganizationSettingsPage />} />
+              <Route path="/organization/members" element={<OrganizationMembersPage />} />
+              <Route path="/organization/audit-logs" element={<AuditLogsPage />} />
+            </Route>
 
-          {/* 404 Catch-all */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+            {/* 404 Catch-all */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </OrganizationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

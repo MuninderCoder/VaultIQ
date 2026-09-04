@@ -17,7 +17,8 @@ export class ChatController {
 
       const conversation = await ChatService.createConversation(
         req.user.userId,
-        req.body?.title
+        req.body?.title,
+        req.organizationId || req.body?.organizationId
       );
 
       ApiResponseHandler.success(
@@ -42,7 +43,12 @@ export class ChatController {
         return;
       }
 
-      const result = await ChatService.listConversations(req.user.userId);
+      const result = await ChatService.listConversations(
+        req.user.userId,
+        50,
+        1,
+        req.organizationId || (req.query as any).organizationId
+      );
       ApiResponseHandler.success(
         res,
         'Conversations retrieved successfully',
@@ -66,7 +72,8 @@ export class ChatController {
 
       const result = await ChatService.getConversationById(
         req.user.userId,
-        req.params.id
+        req.params.id,
+        req.organizationId
       );
 
       ApiResponseHandler.success(
@@ -90,7 +97,11 @@ export class ChatController {
         return;
       }
 
-      await ChatService.deleteConversation(req.user.userId, req.params.id);
+      await ChatService.deleteConversation(
+        req.user.userId,
+        req.params.id,
+        req.organizationId
+      );
       ApiResponseHandler.success(
         res,
         'Conversation deleted successfully',
@@ -115,7 +126,8 @@ export class ChatController {
       const result = await ChatService.sendMessage(
         req.user.userId,
         req.params.id,
-        req.body.message
+        req.body.message,
+        req.organizationId
       );
 
       ApiResponseHandler.success(

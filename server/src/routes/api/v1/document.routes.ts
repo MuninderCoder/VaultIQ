@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { DocumentController } from '../../../controllers/document.controller';
 import { authenticate } from '../../../middleware/auth.middleware';
+import { resolveOrgContext } from '../../../middleware/org.middleware';
 import { documentUploadMiddleware } from '../../../middleware/upload.middleware';
 import { validateRequest } from '../../../middleware/validate.middleware';
 import {
@@ -12,6 +13,7 @@ const router = Router();
 
 // All document endpoints strictly require authentication
 router.use(authenticate);
+router.use(resolveOrgContext);
 
 // 1. Upload document (Multipart upload with signature & size validation)
 router.post('/', documentUploadMiddleware, DocumentController.uploadDocument);

@@ -29,6 +29,7 @@ import { Modal } from '../components/Modal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { documentService } from '../services/documentService';
 import { DocumentItem, DocumentPagination, DocumentStatus } from '../types/document';
+import { cn } from '../utils/cn';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md'];
 const MAX_SIZE_MB = 25;
@@ -59,6 +60,7 @@ export const DocumentsPage: React.FC = () => {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDescription, setUploadDescription] = useState('');
   const [uploadTags, setUploadTags] = useState('');
+  const [uploadVisibility, setUploadVisibility] = useState<'ORGANIZATION' | 'PRIVATE'>('ORGANIZATION');
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -197,7 +199,8 @@ export const DocumentsPage: React.FC = () => {
         {
           title: uploadTitle.trim() || undefined,
           description: uploadDescription.trim() || undefined,
-          tags: uploadTags.trim() || undefined
+          tags: uploadTags.trim() || undefined,
+          visibility: uploadVisibility
         },
         (percent) => {
           setUploadProgress(percent);
@@ -223,6 +226,7 @@ export const DocumentsPage: React.FC = () => {
     setUploadTitle('');
     setUploadDescription('');
     setUploadTags('');
+    setUploadVisibility('ORGANIZATION');
     setUploadProgress(0);
     setUploadError(null);
   };
@@ -511,6 +515,7 @@ export const DocumentsPage: React.FC = () => {
                 <tr>
                   <th scope="col" className="px-6 py-3.5">Name</th>
                   <th scope="col" className="px-4 py-3.5">Type</th>
+                  <th scope="col" className="px-4 py-3.5">Visibility</th>
                   <th scope="col" className="px-4 py-3.5">Size</th>
                   <th scope="col" className="px-4 py-3.5">Status</th>
                   <th scope="col" className="px-4 py-3.5">Indexing</th>
@@ -560,6 +565,20 @@ export const DocumentsPage: React.FC = () => {
                     {/* File Type */}
                     <td className="px-4 py-4 uppercase font-semibold text-xs text-slate-500">
                       {doc.extension}
+                    </td>
+
+                    {/* Visibility Badge */}
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span
+                        className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+                          doc.visibility === 'PRIVATE'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                        )}
+                      >
+                        {doc.visibility === 'PRIVATE' ? 'Private' : 'Organization'}
+                      </span>
                     </td>
 
                     {/* Size */}
@@ -875,6 +894,38 @@ export const DocumentsPage: React.FC = () => {
               disabled={isUploading}
               helperText="Enables fast multi-tag search filtering"
             />
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Access Visibility
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setUploadVisibility('ORGANIZATION')}
+                  className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                    uploadVisibility === 'ORGANIZATION'
+                      ? 'border-brand-500 bg-brand-50/60 text-brand-900 font-medium'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <p className="font-semibold text-slate-800">Organization</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Shared with workspace members</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUploadVisibility('PRIVATE')}
+                  className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                    uploadVisibility === 'PRIVATE'
+                      ? 'border-brand-500 bg-brand-50/60 text-brand-900 font-medium'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <p className="font-semibold text-slate-800">Private</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Strictly visible to you only</p>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Real Upload Progress Bar */}

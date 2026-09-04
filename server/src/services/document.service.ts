@@ -2,6 +2,9 @@ import crypto from 'crypto';
 import path from 'path';
 import { Types } from 'mongoose';
 import { DocumentModel, IDocument, DocumentStatus, IndexingStatus } from '../models/Document';
+import { AuthorizationService } from './authorization.service';
+import { AuditService } from './audit.service';
+import { OrgRole, DocumentVisibility } from '../types';
 import { DocumentChunkModel } from '../models/DocumentChunk';
 import { localStorageService } from '../storage/local.storage';
 import { ProcessorFactory } from '../processors/processor.factory';
@@ -15,6 +18,8 @@ export interface DocumentUploadInput {
   title?: string;
   description?: string;
   tags?: string[] | string;
+  visibility?: DocumentVisibility;
+  organizationId?: string;
 }
 
 export interface DocumentStatsResult {
@@ -106,6 +111,10 @@ export class DocumentService {
         size: file.size,
         storagePath,
         status: 'UPLOADED',
+        organizationId: metadataInput?.organizationId && Types.ObjectId.isValid(metadataInput.organizationId)
+          ? new Types.ObjectId(metadataInput.organizationId)
+          : null,
+        visibility: metadataInput?.visibility || 'PRIVATE',
         metadata: {
           title: metadataInput?.title?.trim() || file.originalname,
           description: metadataInput?.description?.trim() || undefined,
@@ -115,6 +124,21 @@ export class DocumentService {
       });
 
       await document.save();
+
+      if (document.organizationId) {
+        await AuditService.log({
+          organizationId: document.organizationId,
+          actorId: new Types.ObjectId(userId),
+          action: 'DOCUMENT_UPLOADED',
+          resourceType: 'DOCUMENT',
+          resourceId: document._id.toString(),
+          metadata: {
+            originalName: document.originalName,
+            size: document.size,
+            visibility: document.visibility
+          }
+        });
+      }
       logger.info(
         `Document uploaded successfully: "${document.originalName}" (${document.size} bytes) for user ${userId}`
       );
@@ -132,16 +156,38 @@ export class DocumentService {
    */
   static async getDocuments(
     userId: string,
-    query: DocumentListQuery
+    query: DocumentListQuery,
+    userOrgRole?: OrgRole | null
   ): Promise<DocumentListResult> {
     const page = query.page || 1;
     const limit = query.limit || 10;
     const skip = (page - 1) * limit;
 
-    // Strict user ownership filter
-    const filter: any = {
-      owner: new Types.ObjectId(userId)
-    };
+    // Determine tenant scope vs personal resource path
+    let filter: any;
+    if (query.organizationId && Types.ObjectId.isValid(query.organizationId)) {
+      const orgId = new Types.ObjectId(query.organizationId);
+      // Organization scope: user can see all ORGANIZATION docs + their own PRIVATE docs
+      filter = {
+        organizationId: orgId,
+        $or: [
+          { visibility: 'ORGANIZATION' },
+          { owner: new Types.ObjectId(userId) }
+        ]
+      };
+      if (query.visibility && query.visibility !== 'ALL') {
+        if (query.visibility === 'PRIVATE') {
+          filter = { organizationId: orgId, visibility: 'PRIVATE', owner: new Types.ObjectId(userId) };
+        } else if (query.visibility === 'ORGANIZATION') {
+          filter = { organizationId: orgId, visibility: 'ORGANIZATION' };
+        }
+      }
+    } else {
+      // Unscoped personal resource path: preserve exact Phase 2 behavior
+      filter = {
+        owner: new Types.ObjectId(userId)
+      };
+    }
 
     // Status filter
     if (query.status && query.status !== 'ALL') {
@@ -194,13 +240,22 @@ export class DocumentService {
   /**
    * Retrieves single document metadata verifying ownership
    */
-  static async getDocumentById(userId: string, documentId: string): Promise<IDocument> {
-    const document = await DocumentModel.findOne({
-      _id: documentId,
-      owner: new Types.ObjectId(userId)
-    });
+  static async getDocumentById(
+    userId: string,
+    documentId: string,
+    userOrgRole?: OrgRole | null,
+    userOrgId?: string | null
+  ): Promise<IDocument> {
+    const document = await DocumentModel.findById(documentId);
 
     if (!document) {
+      const error = new Error('Document not found');
+      (error as any).statusCode = 404;
+      throw error;
+    }
+
+    const canRead = AuthorizationService.canReadDocument(userId, document, userOrgRole, userOrgId);
+    if (!canRead) {
       const error = new Error('Document not found');
       (error as any).statusCode = 404;
       throw error;
@@ -214,9 +269,22 @@ export class DocumentService {
    */
   static async downloadDocument(
     userId: string,
-    documentId: string
+    documentId: string,
+    userOrgRole?: OrgRole | null,
+    userOrgId?: string | null
   ): Promise<{ stream: NodeJS.ReadableStream; document: IDocument }> {
-    const document = await this.getDocumentById(userId, documentId);
+    const document = await this.getDocumentById(userId, documentId, userOrgRole, userOrgId);
+
+    if (document.organizationId) {
+      await AuditService.log({
+        organizationId: document.organizationId,
+        actorId: new Types.ObjectId(userId),
+        action: 'DOCUMENT_VIEWED',
+        resourceType: 'DOCUMENT',
+        resourceId: document._id.toString(),
+        metadata: { originalName: document.originalName }
+      });
+    }
 
     const exists = await localStorageService.exists(document.storagePath);
     if (!exists) {
@@ -232,8 +300,25 @@ export class DocumentService {
   /**
    * Deletes document metadata and physical storage file verifying ownership
    */
-  static async deleteDocument(userId: string, documentId: string): Promise<void> {
-    const document = await this.getDocumentById(userId, documentId);
+  static async deleteDocument(
+    userId: string,
+    documentId: string,
+    userOrgRole?: OrgRole | null,
+    userOrgId?: string | null
+  ): Promise<void> {
+    const document = await DocumentModel.findById(documentId);
+    if (!document) {
+      const error = new Error('Document not found');
+      (error as any).statusCode = 404;
+      throw error;
+    }
+
+    const canDelete = AuthorizationService.canDeleteDocument(userId, document, userOrgRole, userOrgId);
+    if (!canDelete) {
+      const error = new Error('Document not found');
+      (error as any).statusCode = 404;
+      throw error;
+    }
 
     // 1. Delete physical file from storage
     try {
@@ -417,11 +502,16 @@ export class DocumentService {
    * Safe strategy: validates document is PROCESSED, chunks text, generates embeddings,
    * validates vector dimensions, and only replaces old chunks after new chunks are verified.
    */
-  static async indexDocument(userId: string, documentId: string): Promise<IDocument> {
+  static async indexDocument(
+    userId: string,
+    documentId: string,
+    userOrgRole?: OrgRole | null,
+    userOrgId?: string | null
+  ): Promise<IDocument> {
     const ownerId = new Types.ObjectId(userId);
 
     // 1. Fetch document and verify ownership & processed status
-    const document = await this.getDocumentById(userId, documentId);
+    const document = await this.getDocumentById(userId, documentId, userOrgRole, userOrgId);
 
     if (document.status !== 'PROCESSED' || !document.content) {
       const error = new Error('Only PROCESSED documents with extracted text can be indexed');
@@ -489,6 +579,7 @@ export class DocumentService {
       const newChunks = chunkItems.map((item, idx) => ({
         document: document._id,
         owner: ownerId,
+        organizationId: document.organizationId || null,
         chunkIndex: item.chunkIndex,
         text: item.text,
         characterCount: item.characterCount,
@@ -511,6 +602,16 @@ export class DocumentService {
       document.chunkCount = newChunks.length;
       await document.save();
 
+      if (document.organizationId) {
+        await AuditService.log({
+          organizationId: document.organizationId,
+          actorId: ownerId,
+          action: 'DOCUMENT_INDEXED',
+          resourceType: 'DOCUMENT',
+          resourceId: document._id.toString(),
+          metadata: { chunkCount: newChunks.length, dimensions: expectedDims }
+        });
+      }
       logger.info(
         `Document ${document._id} successfully indexed with ${newChunks.length} chunks (${expectedDims} dimensions)`
       );
@@ -564,30 +665,41 @@ export class DocumentService {
   /**
    * Aggregates real document statistics for authenticated user
    */
-  static async getDocumentStats(userId: string): Promise<DocumentStatsResult> {
+  static async getDocumentStats(userId: string, organizationId?: string): Promise<DocumentStatsResult> {
     const ownerId = new Types.ObjectId(userId);
+    let matchFilter: any = { owner: ownerId };
+
+    if (organizationId && Types.ObjectId.isValid(organizationId)) {
+      matchFilter = {
+        organizationId: new Types.ObjectId(organizationId),
+        $or: [
+          { visibility: 'ORGANIZATION' },
+          { owner: ownerId }
+        ]
+      };
+    }
 
     const [totalCount, totalStorageAgg, recentDocs, extAgg, statusAgg, indexingAgg] = await Promise.all([
-      DocumentModel.countDocuments({ owner: ownerId }),
+      DocumentModel.countDocuments(matchFilter),
       DocumentModel.aggregate([
-        { $match: { owner: ownerId } },
+        { $match: matchFilter },
         { $group: { _id: null, totalBytes: { $sum: '$size' } } }
       ]),
-      DocumentModel.find({ owner: ownerId })
+      DocumentModel.find(matchFilter)
         .sort({ uploadedAt: -1 })
         .limit(5)
         .select('_id originalName extension size status uploadedAt')
         .exec(),
       DocumentModel.aggregate([
-        { $match: { owner: ownerId } },
+        { $match: matchFilter },
         { $group: { _id: '$extension', count: { $sum: 1 } } }
       ]),
       DocumentModel.aggregate([
-        { $match: { owner: ownerId } },
+        { $match: matchFilter },
         { $group: { _id: '$status', count: { $sum: 1 } } }
       ]),
       DocumentModel.aggregate([
-        { $match: { owner: ownerId } },
+        { $match: matchFilter },
         { $group: { _id: '$indexingStatus', count: { $sum: 1 } } }
       ])
     ]);

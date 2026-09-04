@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IConversation extends Document {
   _id: Types.ObjectId;
   owner: Types.ObjectId;
+  organizationId?: Types.ObjectId | null;
   title: string;
   createdAt: Date;
   updatedAt: Date;
@@ -14,6 +15,12 @@ const conversationSchema = new Schema<IConversation>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'Conversation owner is required'],
+      index: true
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
       index: true
     },
     title: {
@@ -29,7 +36,9 @@ const conversationSchema = new Schema<IConversation>(
   }
 );
 
-// Compound index for user thread listing sorted by recent activity
+// Compound indexes for user thread listing sorted by recent activity
 conversationSchema.index({ owner: 1, updatedAt: -1 });
+conversationSchema.index({ organizationId: 1, owner: 1, updatedAt: -1 });
 
 export const ConversationModel = model<IConversation>('Conversation', conversationSchema);
+

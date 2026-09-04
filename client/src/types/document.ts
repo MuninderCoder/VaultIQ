@@ -32,6 +32,8 @@ export interface DocumentItem {
   indexingError?: string | null;
   indexedAt?: string | null;
   chunkCount: number;
+  organizationId?: string;
+  visibility?: 'PRIVATE' | 'ORGANIZATION';
   metadata: DocumentMetadata;
   content?: DocumentContent;
   uploadedAt: string;
@@ -79,6 +81,7 @@ export interface DocumentUploadInput {
   title?: string;
   description?: string;
   tags?: string;
+  visibility?: 'PRIVATE' | 'ORGANIZATION';
 }
 
 export interface ProcessingStatusResponse {

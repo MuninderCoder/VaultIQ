@@ -40,7 +40,8 @@ export class RagService implements IRagService {
   public async generateAnswer(
     userId: string,
     question: string,
-    history: Array<{ role: 'user' | 'assistant'; content: string }> = []
+    history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    organizationId?: string
   ): Promise<IRagResult> {
     const startTime = Date.now();
     const trimmedQuestion = (question || '').trim();
@@ -53,8 +54,8 @@ export class RagService implements IRagService {
       `RAG executing for user ${userId} (query: "${trimmedQuestion.substring(0, 50)}...", topK: ${this.topK}, minScore: ${this.minSimilarity})`
     );
 
-    // 1. Reuse existing Phase 4 Semantic Search (Strict user tenant isolation enforced inside SearchService)
-    const searchResult = await SearchService.searchSemantic(userId, trimmedQuestion, this.topK);
+    // 1. Reuse existing Semantic Search with organization pre-authorization
+    const searchResult = await SearchService.searchSemantic(userId, trimmedQuestion, this.topK, organizationId);
 
     // 2. Build bounded evidence context
     const builtContext = this.contextBuilder.buildContext(

@@ -17,6 +17,7 @@ export interface IRagService {
   generateAnswer(
     userId: string,
     question: string,
-    history?: Array<{ role: 'user' | 'assistant'; content: string }>
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    organizationId?: string
   ): Promise<IRagResult>;
 }

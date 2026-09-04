@@ -15,8 +15,18 @@ export const documentListQuerySchema = z.object({
     status: z
       .enum(['ALL', 'UPLOADED', 'PROCESSING', 'PROCESSED', 'FAILED'])
       .optional(),
+    visibility: z.enum(['ALL', 'PRIVATE', 'ORGANIZATION']).optional(),
+    organizationId: z.string().optional(),
     sort: z.string().trim().optional().default('-uploadedAt')
   })
+});
+
+export const uploadDocumentBodySchema = z.object({
+  title: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(1000).optional(),
+  tags: z.union([z.string(), z.array(z.string())]).optional(),
+  visibility: z.enum(['PRIVATE', 'ORGANIZATION']).optional().default('PRIVATE'),
+  organizationId: z.string().optional()
 });
 
 export const documentIdParamSchema = z.object({
@@ -28,3 +38,4 @@ export const documentIdParamSchema = z.object({
 });
 
 export type DocumentListQuery = z.infer<typeof documentListQuerySchema>['query'];
+

@@ -1,6 +1,8 @@
 ﻿import { Types } from 'mongoose';
 import { DocumentChunkModel } from '../models/DocumentChunk';
 import { DocumentModel } from '../models/Document';
+import { OrganizationMemberModel } from '../models/OrganizationMember';
+import { AuthorizationService } from './authorization.service';
 import { EmbeddingServiceFactory } from '../embeddings/embedding.service';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
@@ -36,7 +38,8 @@ export class SearchService {
   public static async searchSemantic(
     userId: string,
     query: string,
-    limit: number = 10
+    limit: number = 10,
+    organizationId?: string
   ): Promise<SemanticSearchResult> {
     const trimmedQuery = (query || '').trim();
     if (!trimmedQuery) {
@@ -52,15 +55,30 @@ export class SearchService {
     const embeddingService = EmbeddingServiceFactory.getService();
     const queryVector = await embeddingService.generateEmbedding(trimmedQuery);
 
+    let orgObjectId: Types.ObjectId | undefined;
+    if (organizationId && Types.ObjectId.isValid(organizationId)) {
+      orgObjectId = new Types.ObjectId(organizationId);
+      // HARD SECURITY: Verify user membership and document.read permission
+      const membership = await OrganizationMemberModel.findOne({
+        organizationId: orgObjectId,
+        userId: ownerId
+      }).lean();
+
+      if (!membership || !AuthorizationService.hasPermission(membership.role, 'document.read')) {
+        logger.warn(`Unauthorized search attempt by user ${userId} for organization ${organizationId}`);
+        return { query: trimmedQuery, count: 0, results: [] };
+      }
+    }
+
     logger.info(
-      `Executing semantic search for user ${userId} with engine: ${env.VECTOR_SEARCH_ENGINE} (limit: ${cappedLimit})`
+      `Executing semantic search for user ${userId} (org: ${organizationId || 'personal'}) with engine: ${env.VECTOR_SEARCH_ENGINE} (limit: ${cappedLimit})`
     );
 
-    // 2. Execute vector search based on configured engine
+    // 2. Execute vector search based on configured engine with pre-retrieval authorization filter
     if (env.VECTOR_SEARCH_ENGINE === 'atlas') {
-      return this.searchAtlasVector(ownerId, queryVector, trimmedQuery, cappedLimit);
+      return this.searchAtlasVector(ownerId, queryVector, trimmedQuery, cappedLimit, orgObjectId);
     } else {
-      return this.searchLocalCosine(ownerId, queryVector, trimmedQuery, cappedLimit);
+      return this.searchLocalCosine(ownerId, queryVector, trimmedQuery, cappedLimit, orgObjectId);
     }
   }
 
@@ -72,7 +90,8 @@ export class SearchService {
     ownerId: Types.ObjectId,
     queryVector: number[],
     query: string,
-    limit: number
+    limit: number,
+    orgId?: Types.ObjectId
   ): Promise<SemanticSearchResult> {
     try {
       // MongoDB Atlas Vector Search Aggregation Pipeline
@@ -84,9 +103,13 @@ export class SearchService {
             queryVector,
             numCandidates: limit * 15,
             limit,
-            filter: {
-              owner: ownerId
-            }
+            filter: orgId
+              ? {
+                  organizationId: orgId
+                }
+              : {
+                  owner: ownerId
+                }
           }
         },
         {
@@ -100,10 +123,21 @@ export class SearchService {
         { $unwind: '$docData' },
         // Verify document is currently PROCESSED and INDEXED
         {
-          $match: {
-            'docData.status': 'PROCESSED',
-            'docData.indexingStatus': 'INDEXED'
-          }
+          $match: orgId
+            ? {
+                'docData.status': 'PROCESSED',
+                'docData.indexingStatus': 'INDEXED',
+                'docData.organizationId': orgId,
+                $or: [
+                  { 'docData.visibility': 'ORGANIZATION' },
+                  { 'docData.owner': ownerId }
+                ]
+              }
+            : {
+                'docData.status': 'PROCESSED',
+                'docData.indexingStatus': 'INDEXED',
+                'docData.owner': ownerId
+              }
         },
         {
           $project: {
@@ -151,14 +185,27 @@ export class SearchService {
     ownerId: Types.ObjectId,
     queryVector: number[],
     query: string,
-    limit: number
+    limit: number,
+    orgId?: Types.ObjectId
   ): Promise<SemanticSearchResult> {
-    // 1. Find all valid PROCESSED & INDEXED document IDs for this user
-    const validDocs = await DocumentModel.find({
-      owner: ownerId,
-      status: 'PROCESSED',
-      indexingStatus: 'INDEXED'
-    })
+    // 1. Pre-authorization: Find valid PROCESSED & INDEXED documents matching authorization criteria
+    const validDocsFilter: any = orgId
+      ? {
+          organizationId: orgId,
+          status: 'PROCESSED',
+          indexingStatus: 'INDEXED',
+          $or: [
+            { visibility: 'ORGANIZATION' },
+            { owner: ownerId }
+          ]
+        }
+      : {
+          owner: ownerId,
+          status: 'PROCESSED',
+          indexingStatus: 'INDEXED'
+        };
+
+    const validDocs = await DocumentModel.find(validDocsFilter)
       .select('_id originalName')
       .lean()
       .exec();
@@ -178,11 +225,18 @@ export class SearchService {
       validDocIds.push(d._id);
     });
 
-    // 2. Fetch chunks belonging strictly to valid documents of this user
-    const chunks = await DocumentChunkModel.find({
-      owner: ownerId,
-      document: { $in: validDocIds }
-    })
+    // 2. Fetch chunks strictly from authorized pre-filtered documents
+    const chunkFilter: any = orgId
+      ? {
+          organizationId: orgId,
+          document: { $in: validDocIds }
+        }
+      : {
+          owner: ownerId,
+          document: { $in: validDocIds }
+        };
+
+    const chunks = await DocumentChunkModel.find(chunkFilter)
       .select('_id document chunkIndex text characterCount wordCount embedding')
       .lean()
       .exec();

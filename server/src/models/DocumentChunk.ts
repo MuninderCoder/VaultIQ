@@ -4,6 +4,7 @@ export interface IDocumentChunk extends MongooseDocument {
   _id: Types.ObjectId;
   document: Types.ObjectId;
   owner: Types.ObjectId;
+  organizationId?: Types.ObjectId | null;
   chunkIndex: number;
   text: string;
   characterCount: number;
@@ -28,6 +29,12 @@ const documentChunkSchema = new Schema<IDocumentChunk>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'Owner ID is required'],
+      index: true
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
       index: true
     },
     chunkIndex: {
@@ -80,5 +87,6 @@ const documentChunkSchema = new Schema<IDocumentChunk>(
 
 // Compound index for user-isolated queries and document chunk ordering
 documentChunkSchema.index({ owner: 1, document: 1, chunkIndex: 1 });
+documentChunkSchema.index({ organizationId: 1, document: 1 });
 
 export const DocumentChunkModel = model<IDocumentChunk>('DocumentChunk', documentChunkSchema);
