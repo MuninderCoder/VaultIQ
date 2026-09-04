@@ -71,23 +71,26 @@ This roadmap outlines the evolution of VaultIQ from initial architecture to a hi
 
 ---
 
-## Phase 5: RAG & Document Intelligence (Next Phase)
-- Dense vector retrieval combined with reciprocal rank fusion
-- Retrieval augmented generation (RAG) context assembly
-- Grounded citation extraction with exact document and chunk attribution
-- LLM completion pipeline (OpenAI / Anthropic / local Ollama)
-- Conversational chat interface and thread persistence
-- Hybrid search fusion (Reciprocal Rank Fusion - RRF)
-- Pre-filtering by organizational ACLs and document boundaries
-
----
-
-## Phase 5: AI Knowledge Assistant & RAG
-- RAG pipeline orchestration: query rewrite, retrieval, reranking, context assembly
-- LLM inference integration (Claude, GPT-4, Llama 3, Gemini)
-- Strict grounded generation with exact source citations (document title, page, excerpt)
-- Multi-turn conversation memory with session persistence
-- Guardrails against hallucinations and out-of-domain knowledge fabrication
+## Phase 5: RAG & AI Assistant (Complete ✅)
+- [x] Grounded RAG pipeline consuming existing Phase 4 semantic retrieval (`SearchService.searchSemantic`)
+- [x] Zero duplicate vector search implementations or redundant embedding calls
+- [x] Bounded Context Builder with similarity score thresholding (`RAG_MIN_SIMILARITY=0.5`)
+- [x] Dynamic context token budgeting (`RAG_MAX_CONTEXT_CHARS=6000`, `RAG_TOP_K=5`)
+- [x] Strict prompt injection defense isolating retrieved evidence in bounded XML tags
+- [x] Controlled zero-hallucination fallback: fast-path rejection without calling LLM when evidence is insufficient
+- [x] Multi-provider LLM abstraction (`ILLMService`, `OpenAILLMService`, `MockLLMService`, `LLMServiceFactory`)
+- [x] Native HTTPS OpenAI integration (`gpt-4o-mini`, temperature 0.2, max tokens 1000, exponential backoff)
+- [x] Deterministic mock LLM for offline testing and continuous integration
+- [x] Persistent Mongoose schemas: `Conversation` (owner-indexed) and `Message` (conversation-indexed, verified sources array)
+- [x] Bounded conversation history sliding window (`CHAT_HISTORY_LIMIT=10`)
+- [x] Message input validation (1–2000 chars, whitespace rejection, sanitized strings via Zod)
+- [x] Complete REST API: `POST /conversations`, `GET /conversations`, `GET /conversations/:id`, `DELETE /conversations/:id` (with cascade message deletion), `POST /conversations/:id/messages`
+- [x] Strict tenant isolation across all conversations, messages, queries, chunks, and citations
+- [x] Responsive React 18 chat interface (`ChatPage.tsx`) with conversation sidebar, thread switching, empty state suggestions, and auto-scrolling
+- [x] Phased search and synthesis status indicators ("Searching indexed documents..." -> "Synthesizing answer...")
+- [x] Verified source citation cards displaying document name, chunk index, similarity score, and excerpt
+- [x] Direct navigation from citation cards to document details (`/documents`)
+- [x] Comprehensive test suite (18 unit, integration, security, and cascade tests; 64 tests passing across monorepo)
 
 ---
 

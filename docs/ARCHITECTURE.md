@@ -222,18 +222,112 @@ VaultIQ Phase 3 establishes a robust, decoupled text extraction pipeline convert
 
 ---
 
-## 8. Multi-Phase Progression Context
+---
+
+## 8. Semantic / Vector Search Architecture (Phase 4)
+
+VaultIQ Phase 4 introduces boundary-aware text chunking and vector embeddings with MongoDB Atlas Vector Search as primary and cosine similarity fallback:
 
 ```
- Phase 1: Foundation (Complete)
+[Normalized Text]
+       │
+       ▼
+[TextChunker] ──► Boundary-aware sliding window (size: 1000 chars, overlap: 150 chars)
+       │
+       ▼
+[EmbeddingService] ──► OpenAI text-embedding-3-small (1536 dims) or Deterministic Mock
+       │
+       ▼
+[DocumentChunk Collection] ──► Stored with parent document reference & owner isolation
+       │
+       ▼
+[SearchService] ──► Atlas $vectorSearch (Production) or Local Cosine Fallback (Dev/Test)
+```
+
+---
+
+## 9. Grounded RAG & AI Assistant Pipeline (Phase 5)
+
+VaultIQ Phase 5 transforms Phase 4 semantic retrieval into a secure, grounded conversational intelligence platform:
+
+```
+                      ┌────────────────────────────┐
+                      │    User Chat Question      │
+                      └─────────────┬──────────────┘
+                                    │
+                                    ▼
+                      ┌────────────────────────────┐
+                      │  Authenticated ChatService │
+                      │  (Enforces User Ownership) │
+                      └─────────────┬──────────────┘
+                                    │
+                                    ▼
+                      ┌────────────────────────────┐
+                      │    SearchService (Phase 4) │
+                      │ .searchSemantic(userId, q) │
+                      └─────────────┬──────────────┘
+                                    │ Raw Chunks
+                                    ▼
+                      ┌────────────────────────────┐
+                      │      ContextBuilder        │
+                      │ - Filter score >= 0.5      │
+                      │ - Sort descending          │
+                      │ - Enforce cap <= 6000 chars│
+                      └─────────────┬──────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │ Insufficient Evidence?        │
+                    ├───────────────────────────────┤
+                    │ Yes ──► Controlled Fallback   │
+                    │         (Zero Hallucination)  │
+                    │ No                            │
+                    └───────────────┬───────────────┘
+                                    │ Bounded Evidence
+                                    ▼
+                      ┌────────────────────────────┐
+                      │       PromptBuilder        │
+                      │ - Strict system role       │
+                      │ - Enclosed in <context>    │
+                      │ - Prompt injection defense │
+                      │ - Mandatory citations [Doc]│
+                      └─────────────┬──────────────┘
+                                    │
+                                    ▼
+                      ┌────────────────────────────┐
+                      │        LLM Service         │
+                      │ (OpenAI gpt-4o-mini / Mock)│
+                      └─────────────┬──────────────┘
+                                    │
+                                    ▼
+                      ┌────────────────────────────┐
+                      │  Message Persistence & DTO │
+                      │ - Save user message        │
+                      │ - Save assistant message   │
+                      │ - Attach verified sources  │
+                      │ - Cascade deletion support │
+                      └────────────────────────────┘
+```
+
+### Database Models (Phase 5)
+- **`Conversation`**: `_id`, `owner` (ref User), `title`, `metadata`, `createdAt`, `updatedAt`.
+  - Compound index: `{ owner: 1, updatedAt: -1 }`.
+- **`Message`**: `_id`, `conversation` (ref Conversation), `role` (`'user'` | `'assistant'`), `content`, `sources` (array of `{ documentId, originalName, chunkIndex, similarityScore, snippet }`), `tokenUsage`, `createdAt`.
+  - Compound index: `{ conversation: 1, createdAt: 1 }`.
+
+---
+
+## 10. Multi-Phase Progression Context
+
+```
+ Phase 1: Foundation (Complete ✅)
      ↓
- Phase 2: Document Management & Secure Storage (Complete)
+ Phase 2: Document Management & Secure Storage (Complete ✅)
      ↓
- Phase 3: Document Processing & Text Extraction (Complete)
+ Phase 3: Document Processing & Text Extraction (Complete ✅)
      ↓
- Phase 4: Document Indexing & Chunking (Next)
+ Phase 4: Semantic / Vector Search (Complete ✅)
      ↓
- Phase 5: Vector Search & Hybrid Retrieval
+ Phase 5: Grounded RAG & AI Knowledge Assistant (Complete ✅)
      ↓
- Phase 6: RAG & AI Knowledge Assistant
+ Phase 6: Enterprise Collaboration & Intelligence (Next Phase)
 ```

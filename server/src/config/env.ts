@@ -27,7 +27,17 @@ const envSchema = z.object({
   CHUNK_SIZE: z.string().default('1000').transform((val) => parseInt(val, 10)),
   CHUNK_OVERLAP: z.string().default('150').transform((val) => parseInt(val, 10)),
   MAX_SEARCH_RESULTS: z.string().default('50').transform((val) => parseInt(val, 10)),
-  VECTOR_SEARCH_ENGINE: z.enum(['atlas', 'local']).default('local')
+  VECTOR_SEARCH_ENGINE: z.enum(['atlas', 'local']).default('local'),
+  // Phase 5: RAG & AI Assistant Configuration
+  LLM_PROVIDER: z.enum(['openai', 'mock']).default('openai'),
+  LLM_MODEL: z.string().default('gpt-4o-mini'),
+  LLM_TEMPERATURE: z.string().default('0.2').transform((val) => parseFloat(val)),
+  LLM_MAX_OUTPUT_TOKENS: z.string().default('1000').transform((val) => parseInt(val, 10)),
+  RAG_TOP_K: z.string().default('5').transform((val) => parseInt(val, 10)),
+  RAG_MIN_SIMILARITY: z.string().default('0.5').transform((val) => parseFloat(val)),
+  RAG_MAX_CONTEXT_CHARS: z.string().default('6000').transform((val) => parseInt(val, 10)),
+  CHAT_HISTORY_LIMIT: z.string().default('10').transform((val) => parseInt(val, 10)),
+  CHAT_MAX_MESSAGE_LENGTH: z.string().default('2000').transform((val) => parseInt(val, 10))
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

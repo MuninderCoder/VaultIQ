@@ -14,9 +14,10 @@ Official Repository: [https://github.com/MuninderCoder/VaultIQ.git](https://gith
 - **Phase 2 — Document Management & Secure Storage**: Complete (Storage abstraction, local filesystem storage, Document model, upload validation, magic-byte checks, document CRUD, download, search/filter/pagination, dashboard statistics)
 - **Phase 3 — Document Processing & Text Extraction**: Complete (Multi-format text extraction pipeline [PDF, DOCX, TXT, MD], text normalizer, character/word/page metrics, lifecycle management, async processing trigger, processing status query, extracted content retrieval & viewer modal)
 - **Phase 4 — Semantic / Vector Search**: Complete (Boundary-aware character chunking, 1536-dim vector embeddings via OpenAI / deterministic mock, DocumentChunk collection, Atlas Vector Search with local cosine fallback, user isolation, search API & UI)
-- **Phase 5 — RAG & Document Intelligence**: Next Phase (Context assembly, prompt engineering, grounded citation extraction, LLM answer synthesis)
+- **Phase 5 — RAG & AI Assistant**: Complete (Grounded RAG pipeline consuming Phase 4 search, LLM provider abstraction [OpenAI gpt-4o-mini & deterministic Mock], bounded context builder with similarity thresholding [min 0.5, max 6000 chars], prompt injection defense, controlled zero-hallucination fallback, persistent conversation & message schemas with cascade deletion, chat sidebar, verified source citation cards, phased synthesis UI)
+- **Phase 6 — Enterprise Intelligence & Collaboration**: Next Phase (SSO/SAML, organizational multi-tenancy, RBAC/ABAC, audit logs, team workspaces)
 
-> **Strict Boundary Notice**: Phases 1 through 4 establish enterprise storage, document management, normalized text extraction, and vector semantic search. No LLM answer generation, generative chat, conversational agent, or placeholder AI responses are introduced in this phase.
+> **Strict Boundary Notice**: Phases 1 through 5 establish enterprise storage, document management, normalized text extraction, vector semantic search, and grounded conversational RAG with strict tenant isolation. Autonomous tool-using agents, agentic workflows, and external analytics are strictly reserved for Phase 6.
 
 ---
 
@@ -162,13 +163,25 @@ All endpoints are versioned under `/api/v1/`.
 - **`GET /api/v1/documents/:id/processing`**: Query processing status, character count, word count, page count, and safe error details.
 - **`GET /api/v1/documents/:id/content`**: Retrieve normalized extracted text and processing metadata for a processed document.
 
+### Semantic / Vector Search (Phase 4)
+- **`POST /api/v1/documents/:id/index`**: Chunk normalized text and generate 1536-dimensional embeddings.
+- **`GET /api/v1/documents/:id/indexing`**: Check indexing lifecycle state (`NOT_INDEXED`, `INDEXING`, `INDEXED`, `INDEX_FAILED`).
+- **`GET /api/v1/search?q=...&limit=...`**: Vector semantic search with pre-filtering by owner and similarity ranking.
+
+### RAG & AI Assistant (Phase 5)
+- **`POST /api/v1/chat/conversations`**: Create a new persistent conversation thread.
+- **`GET /api/v1/chat/conversations`**: List conversations for the authenticated user ordered by recent activity.
+- **`GET /api/v1/chat/conversations/:id`**: Get conversation details along with chronological message history.
+- **`DELETE /api/v1/chat/conversations/:id`**: Delete a conversation thread with cascade deletion of all contained messages.
+- **`POST /api/v1/chat/conversations/:id/messages`**: Send user message, execute RAG pipeline (retrieval -> context assembly -> prompt defense -> LLM synthesis), persist conversation, and return assistant response with verified citations.
+
 ---
 
 ## Verification & Testing
 
 Run all automated tests across workspaces:
 ```bash
-# Backend unit & integration tests (30/30 passing)
+# Backend unit & integration tests (64/64 passing across 6 suites)
 npm run test --workspace=server
 
 # TypeScript strict checks across monorepo (0 errors)
