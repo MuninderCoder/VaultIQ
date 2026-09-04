@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Accessible focus visible rings */
+:focus-visible {
+  outline: 2px solid #0e8ce4;
+  outline-offset: 2px;
+}

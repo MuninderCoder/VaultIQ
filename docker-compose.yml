@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # MongoDB Database Service
+  mongodb:
+    image: mongo:7.0
+    container_name: vaultiq-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: vaultiq
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - vaultiq-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Express Backend API Service
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    container_name: vaultiq-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      CLIENT_URL: http://localhost:3000
+      MONGODB_URI: mongodb://mongodb:27017/vaultiq
+      JWT_SECRET: vaultiq_production_jwt_secret_token_key_change_me_in_prod!
+      JWT_EXPIRES_IN: 7d
+      API_VERSION: v1
+      UPLOAD_DIR: /app/uploads
+      MAX_FILE_SIZE_MB: 25
+    volumes:
+      - vaultiq_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - vaultiq-network
+
+  # React Frontend Web Client Service
+  client:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client
+    container_name: vaultiq-client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    networks:
+      - vaultiq-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  vaultiq_uploads:
+    driver: local
+
+networks:
+  vaultiq-network:
+    driver: bridge
