@@ -16,6 +16,11 @@ export const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const hasLength = password.length >= 8;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -25,8 +30,13 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    if (password.length < 8) {
+    if (!hasLength) {
       setError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (!hasUpper || !hasLower || !hasNumber) {
+      setError('Password must contain at least one uppercase letter, one lowercase letter, and one number.');
       return;
     }
 
@@ -40,20 +50,23 @@ export const RegisterPage: React.FC = () => {
       });
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
-      const message =
-        err.response?.data?.message ||
+      const responseData = err.response?.data;
+      const validationErrors = responseData?.error?.errors || responseData?.data?.errors;
+      let message =
+        responseData?.message ||
         err.message ||
         'Registration failed. Please check the input requirements.';
+
+      if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+        const details = validationErrors.map((item: any) => item.message).join('. ');
+        message = `${message}: ${details}`;
+      }
+
       setError(message);
     } finally {
       setIsLoading(false);
     }
   };
-
-  const hasLength = password.length >= 8;
-  const hasUpper = /[A-Z]/.test(password);
-  const hasLower = /[a-z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
 
   return (
     <div>
