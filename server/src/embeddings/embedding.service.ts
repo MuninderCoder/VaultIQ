@@ -1,4 +1,4 @@
-﻿import { IEmbeddingService } from './embedding.interface';
+import { IEmbeddingService } from './embedding.interface';
 import { OpenAIEmbeddingService } from './openai.embedding';
 import { MockEmbeddingService } from './mock.embedding';
 import { env } from '../config/env';
@@ -12,8 +12,15 @@ export class EmbeddingServiceFactory {
       return this.instance;
     }
 
-    if (env.EMBEDDING_PROVIDER === 'mock' || env.NODE_ENV === 'test') {
-      logger.info('Initializing MockEmbeddingService (deterministic test provider)');
+    const provider = process.env.EMBEDDING_PROVIDER || env.EMBEDDING_PROVIDER;
+    const hasApiKey = Boolean(env.OPENAI_API_KEY || process.env.OPENAI_API_KEY);
+
+    if (provider === 'mock' || env.NODE_ENV === 'test' || (!hasApiKey && env.NODE_ENV === 'development')) {
+      if (!hasApiKey && provider === 'openai') {
+        logger.warn('OPENAI_API_KEY is not configured. Falling back to MockEmbeddingService for local development.');
+      } else {
+        logger.info('Initializing MockEmbeddingService (deterministic test provider)');
+      }
       this.instance = new MockEmbeddingService(env.EMBEDDING_DIMENSIONS, 'mock-deterministic');
     } else {
       logger.info(`Initializing OpenAIEmbeddingService with model: ${env.EMBEDDING_MODEL}`);
