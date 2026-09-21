@@ -58,9 +58,10 @@ export const LoginPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
-          label="Corporate Email"
+          name="email"
+          label="Email Address"
           type="email"
-          placeholder="name@company.com"
+          placeholder="name@gmail.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           leftIcon={<Mail className="w-4 h-4" />}
@@ -69,6 +70,7 @@ export const LoginPage: React.FC = () => {
         />
 
         <Input
+          name="password"
           label="Password"
           type="password"
           placeholder="••••••••"

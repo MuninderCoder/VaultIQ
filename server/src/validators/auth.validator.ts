@@ -11,7 +11,8 @@ export const registerSchema = z.object({
       .string({ required_error: 'Email is required' })
       .trim()
       .email('Invalid email address')
-      .toLowerCase(),
+      .toLowerCase()
+      .endsWith('@gmail.com', 'Only @gmail.com email addresses are allowed'),
     password: z
       .string({ required_error: 'Password is required' })
       .min(8, 'Password must be at least 8 characters long')

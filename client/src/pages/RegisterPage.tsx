@@ -25,6 +25,11 @@ export const RegisterPage: React.FC = () => {
     e.preventDefault();
     setError(null);
 
+    if (!email.trim().toLowerCase().endsWith('@gmail.com')) {
+      setError('Only @gmail.com email addresses are allowed.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -86,6 +91,7 @@ export const RegisterPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
+          name="name"
           label="Full Name"
           type="text"
           placeholder="Jane Doe"
@@ -97,9 +103,10 @@ export const RegisterPage: React.FC = () => {
         />
 
         <Input
-          label="Corporate Email"
+          name="email"
+          label="Email Address"
           type="email"
-          placeholder="name@company.com"
+          placeholder="name@gmail.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           leftIcon={<Mail className="w-4 h-4" />}
@@ -108,6 +115,7 @@ export const RegisterPage: React.FC = () => {
         />
 
         <Input
+          name="password"
           label="Password"
           type="password"
           placeholder="Minimum 8 characters"
@@ -119,6 +127,7 @@ export const RegisterPage: React.FC = () => {
         />
 
         <Input
+          name="confirmPassword"
           label="Confirm Password"
           type="password"
           placeholder="Re-enter password"
