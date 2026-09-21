@@ -17,6 +17,7 @@ import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { chatService } from '../services/chatService';
+import { documentService } from '../services/documentService';
 import { IConversationItem, IMessageItem } from '../types/chat';
 
 export const ChatPage: React.FC = () => {
@@ -30,15 +31,59 @@ export const ChatPage: React.FC = () => {
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [statusPhase, setStatusPhase] = useState<'searching' | 'generating' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto scroll to bottom of messages
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setErrorMessage(null);
+
+    try {
+      // 1. Upload
+      const uploadRes = await documentService.uploadDocument(file);
+      const docId = uploadRes.data?.document._id;
+      
+      if (docId) {
+        // 2. Process (Extract text)
+        await documentService.processDocument(docId);
+        // 3. Index (Embed text)
+        await documentService.indexDocument(docId);
+        
+        // Add a temporary system message to indicate success
+        const sysMsg: IMessageItem = {
+          _id: 'sys-' + Date.now(),
+          conversation: activeConversationId || 'temp',
+          owner: '',
+          role: 'assistant',
+          content: `✅ Successfully uploaded and indexed: **${file.name}**. You can now ask questions about it!`,
+          sources: [],
+          createdAt: new Date().toISOString()
+        };
+        setMessages((prev) => [...prev, sysMsg]);
+      }
+    } catch (err: any) {
+      setErrorMessage(
+        err.response?.data?.message || err.message || 'Failed to upload and index document.'
+      );
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   useEffect(() => {
@@ -475,21 +520,37 @@ export const ChatPage: React.FC = () => {
         <div className="p-4 border-t border-slate-200 bg-slate-50/40">
           <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto relative flex flex-col">
             <div className="relative">
+              <input
+                type="file"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".pdf,.docx,.doc,.txt,.md,.csv,.xml,.json"
+              />
+              <button
+                type="button"
+                disabled={isSending || isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute left-2.5 bottom-3.5 p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Upload document"
+              >
+                {isUploading ? <LoadingSpinner size="sm" color="brand" /> : <Plus className="w-5 h-5" />}
+              </button>
               <textarea
                 ref={textareaRef}
                 rows={2}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a question about your documents (e.g. policies, architecture, specs)..."
-                disabled={isSending}
-                className="w-full resize-none rounded-xl border border-slate-300 bg-white py-3 pl-4 pr-14 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-slate-100 disabled:cursor-not-allowed shadow-xs"
+                placeholder="Ask a question or upload a document to analyze..."
+                disabled={isSending || isUploading}
+                className="w-full resize-none rounded-xl border border-slate-300 bg-white py-3 pl-12 pr-14 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-slate-100 disabled:cursor-not-allowed shadow-xs"
               />
               <Button
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={!inputText.trim() || isSending}
+                disabled={!inputText.trim() || isSending || isUploading}
                 className="absolute right-2.5 bottom-3.5 px-3 py-1.5 rounded-lg"
                 aria-label="Send message"
               >

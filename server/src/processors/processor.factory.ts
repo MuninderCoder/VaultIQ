@@ -1,4 +1,4 @@
-﻿import path from 'path';
+import path from 'path';
 import { DocumentProcessor } from './processor.interface';
 import { PdfProcessor } from './pdf.processor';
 import { DocxProcessor } from './docx.processor';
@@ -34,6 +34,7 @@ export class ProcessorFactory {
       return this.textProcessor;
     }
 
-    throw new Error(`Unsupported file format for document processing: ${mimeType || ext}`);
+    // Fallback to text processor for any unrecognized file format
+    return this.textProcessor;
   }
 }
